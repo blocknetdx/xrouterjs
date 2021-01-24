@@ -146,10 +146,11 @@ addNetwork({
   xpubkey: 0x0488b21e,
   xprivkey: 0x0488ade4,
   networkMagic: 0xa3a2a0a1,
+  // networkMagic: 0xa1a0a2a3,
   port: 41412,
   dnsSeeds: [
     'seed1.blocknet.co',
-    'seed2.blocknet.co',
+    // 'seed2.blocknet.co',
     // 'seed3.blocknet.co'
   ]
 });

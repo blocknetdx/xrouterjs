@@ -137,6 +137,7 @@ Pool.prototype.connect = function connect() {
  * Will disconnect all peers that are connected.
  */
 Pool.prototype.disconnect = function disconnect() {
+  console.log('pool disconnect')
   this.keepalive = false;
   for (var i in this._connectedPeers) {
     this._connectedPeers[i].disconnect();
@@ -200,7 +201,6 @@ Pool.prototype._connectPeer = function _connectPeer(addr) {
     });
 
     peer.on('connect', function peerConnect() {
-      console.log('peerconnect', addr)
       self.emit('peerconnect', peer, addr);
     });
 
@@ -244,7 +244,7 @@ Pool.prototype._addPeerEventHandlers = function(peer, addr) {
   var self = this;
 
   peer.on('disconnect', function peerDisconnect() {
-    console.log('peerdisconnect', addr)
+    console.log('pool disconnect')
     self.emit('peerdisconnect', peer, addr);
   });
   peer.on('ready', function peerReady() {
@@ -253,7 +253,7 @@ Pool.prototype._addPeerEventHandlers = function(peer, addr) {
   });
   Pool.PeerEvents.forEach(function addPeerEvents(event) {
     peer.on(event, function peerEvent(message) {
-      console.log('peer' + event, addr)
+      console.log('peer' + event, addr, message)
       self.emit('peer' + event, peer, message);
     });
   });

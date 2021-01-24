@@ -82,7 +82,6 @@ function Peer(options) {
   var self = this;
   this.on('verack', function() {
     self.status = Peer.STATUS.READY;
-    console.log(555)
     self.emit('ready');
   });
 
@@ -162,24 +161,29 @@ Peer.prototype._addSocketEventHandlers = function() {
   this.socket.on('end', self.disconnect.bind(this));
 
   this.socket.on('data', function(data) {
+    console.log('data', data)
     self.dataBuffer.push(data);
 
     if (self.dataBuffer.length > Peer.MAX_RECEIVE_BUFFER) {
+      console.log('data disconnect')
       // TODO: handle this case better
       return self.disconnect();
     }
     try {
+      console.log('data readmessage')
       self._readMessage();
     } catch (e) {
+      console.log('data try catch error')
       return self.disconnect();
     }
   });
 };
 
 Peer.prototype._onError = function(e) {
-  console.log('error', e)
+  console.log('error in peer: ', e)
   this.emit('error', e);
   if (this.status !== Peer.STATUS.DISCONNECTED) {
+    console.log('hey hey')
     this.disconnect();
   }
 };
@@ -209,7 +213,7 @@ Peer.prototype.sendMessage = function(message) {
 Peer.prototype._sendVersion = function() {
   // todo: include sending local ip address
   var message = this.messages.Version({relay: this.relay});
-  console.log(111, message)
+  console.log('sendVersion', message)
   this.versionSent = true;
   this.sendMessage(message);
 };
