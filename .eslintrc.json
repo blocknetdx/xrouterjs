@@ -16,18 +16,6 @@
     "eol-last": 1,
     "func-call-spacing": [1, "never"],
     "func-style": [2, "expression"],
-    "keyword-spacing": [1, {
-      "after": false,
-      "before": true,
-      "overrides": {
-        "case": {
-          "after": true
-        },
-        "else": {
-          "after": true
-        }
-      }
-    }],
     "new-cap": 2,
     "quotes": [1, "single"],
     "semi": 1,

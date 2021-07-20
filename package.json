@@ -30,8 +30,10 @@
   "license": "MIT",
   "homepage": "https://github.com/blocknetdx/xrouterjs#readme",
   "devDependencies": {
+    "@types/bitcore-lib": "^0.15.2",
     "@types/expect": "^24.3.0",
     "@types/mocha": "^8.2.2",
+    "@types/superagent": "^4.1.11",
     "@typescript-eslint/eslint-plugin": "^4.23.0",
     "@typescript-eslint/parser": "^4.23.0",
     "eslint": "^7.26.0",
@@ -40,5 +42,11 @@
     "ts-mocha": "^8.0.0",
     "typescript": "^4.2.4"
   },
-  "dependencies": {}
+  "dependencies": {
+    "bitcore-lib": "^8.25.10",
+    "btc-p2p": "^0.2.0",
+    "p2p-manager": "^0.1.0",
+    "p2p-node": "^0.1.1",
+    "superagent": "^6.1.0"
+  }
 }
