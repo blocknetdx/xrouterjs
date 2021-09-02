@@ -1,29 +1,38 @@
+import { Service } from "./service";
+
 export interface ServiceNodeData {
-  pubKey?: string|undefined;
-  host?: string|undefined;
-  port?: number|undefined;
-  endpoint?: string|undefined;
-  tls?: boolean|undefined;
-  exrCompatible?: boolean|undefined;
-  services?: Array<string>|undefined;
-  wallets?: Array<string>|undefined;
-  username?: string|undefined;
-  password?: string|undefined;
-  xrouterVersion?: number|undefined;
-  configStr?: string|undefined;
+  pubKey: string;
+  host: string;
+  port: number;
+  tls: boolean;
+  exrCompatible: boolean;
+  services: Array<Service>;
+  wallets: Array<string>;
+  plugins: Array<string>;
+  xrouterVersion: number;
+  fee: string;
+  paymentAddress: string;
+  clientRequestLimit: number;
+  fetchLimit: number,
+  lastPingTime: number,
 }
 
 export class ServiceNode {
 
   pubKey = '';
   host = '';
-  port = 41414;
+  port = 0;
   tls = false;
   exrCompatible = false;
-  services: Array<string> = [];
+  services: Array<Service> = [];
+  plugins: Array<string> = [];
   wallets: Array<string> = [];
   xrouterVersion = 0;
-  configStr = '';
+  fee = '0';
+  clientRequestLimit = 0;
+  fetchLimit = 0;
+  paymentAddress = '';
+  lastPingTime = 0;
 
   constructor(config: ServiceNodeData) {
     const keys = new Set(Object.keys(config));
@@ -34,8 +43,13 @@ export class ServiceNode {
     if(keys.has('exrCompatible')) this.exrCompatible = config.exrCompatible || this.exrCompatible;
     if(keys.has('services')) this.services = config.services || this.services;
     if(keys.has('xrouterVersion')) this.xrouterVersion = config.xrouterVersion || this.xrouterVersion;
-    if(keys.has('configStr')) this.configStr = config.configStr || this.configStr;
     if(keys.has('wallets')) this.wallets = config.wallets || this.wallets;
+    if(keys.has('plugins')) this.plugins = config.plugins || this.plugins;
+    if(keys.has('paymentAddress')) this.paymentAddress = config.paymentAddress || this.paymentAddress;
+    if(keys.has('clientRequestLimit')) this.clientRequestLimit = config.clientRequestLimit || this.clientRequestLimit;
+    if(keys.has('fetchLimit')) this.fetchLimit = config.fetchLimit || this.fetchLimit;
+    if(keys.has('fee')) this.fee = config.fee || this.fee;
+    if(keys.has('lastPingTime')) this.lastPingTime = config.lastPingTime || this.lastPingTime;
   }
 
   endpoint(): string {

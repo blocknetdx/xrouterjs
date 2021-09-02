@@ -1,7 +1,8 @@
 import { NetworkParams } from '../networks/NetworkParams';
 import { Peer } from 'p2p-node';
 import { Pool } from '../bitcore-p2p/lib';
-import {ServiceNode, ServiceNodeData} from './service-node';
+import { ServiceNode, ServiceNodeData } from './service-node';
+import { Service } from "./service";
 
 // import { dnsLookup } from '../util';
 // import { PeerManager } from 'p2p-manager';
@@ -17,6 +18,24 @@ import {ServiceNode, ServiceNodeData} from './service-node';
 //   banned: any,
 //   outboundGroups: any,
 // }
+
+const headerPatt = /\[(.+)]/;
+const splitIntoSections = (splitConfig: string[][]): [string, {[key: string]: string}][] => {
+  const sections: [string, {[key: string]: any}][] = [];
+  for(const [key, value] of splitConfig) {
+    if(headerPatt.test(key)) {
+      // @ts-ignore
+      const matches = key.match(headerPatt) || [];
+      const newKey = matches[1];
+      if(newKey)
+        sections.push([newKey, {}]);
+    } else if(sections.length > 0) {
+      const lastIdx = sections.length - 1;
+      sections[lastIdx][1][key] = value;
+    }
+  }
+  return sections;
+};
 
 interface XrouterOptions {
   maxPeers: number;
@@ -101,43 +120,115 @@ export class XRouter {
     peerMgr.on('peersnp', (peer: Peer, message: any) => {
       // console.log('snp', message);
       if(message.config && message.config.xrouter && message.config.xrouter.config) {
+        const { pubKey: pubKeyRaw, pingTime } = message;
+        const pubKey = pubKeyRaw.toString('hex');
+        if(this.snodes.some(snode => snode.pubKey === pubKey && snode.lastPingTime === pingTime))
+          return;
         const splitConfig: string[][] = message.config.xrouter.config
           .split('\n')
           .map((s: string) => s.trim())
           .filter((s: string) => s)
           .filter((s: string) => !/^#/.test(s))
           .map((s: string): string[] => s.split('=').map(ss => ss.trim()));
-        const configStr = message.config.xrouter;
-        const hostIdx = splitConfig.findIndex((a: string[]) => a[0] === 'host');
-        const host = hostIdx >= 0 && splitConfig[hostIdx][1] ? splitConfig[hostIdx][1] : '';
-        if(!host) return;
-        const portIdx = splitConfig.findIndex((a: string[]) => a[0] === 'port');
-        const port = portIdx >= 0 && splitConfig[portIdx][1] ? Number(splitConfig[portIdx][1]) : 0;
-        const walletsIdx = splitConfig.findIndex((a: string[]) => a[0] === 'wallets');
-        const wallets = walletsIdx >= 0 && splitConfig[walletsIdx][1] ? splitConfig[walletsIdx][1].split(',').map(s => s.trim()).filter(s => s) : [];
-        const mainIdx = splitConfig.findIndex((a: string[]) => a[0] === '[Main]');
-        let fee = 0;
-        for(let i = mainIdx; i < splitConfig.length; i++) {
-          if(/\[.+]/.test(splitConfig[i][0])) break;
-          if(splitConfig[i][0] === 'fee' && splitConfig[i][1]) {
-            fee = Number(splitConfig[i][1]);
-          }
-        }
+        const sections = splitIntoSections(splitConfig);
+        // console.log(sections);
+        // const configStr = message.config.xrouter;
+        // console.log('configStr', configStr);
+        const mainIdx = sections.findIndex((arr) => arr[0] === 'Main');
+        if(mainIdx < 0) return;
+        const mainSection = sections[mainIdx];
+        const serviceSections = sections.filter((a, i) => i !== mainIdx);
         const xrouterVersion = message.config.xrouterversion;
-        const serviceNodeData: ServiceNodeData = {
-          pubKey: message.pubKey.toString('hex'),
+        const {
+          // main specific
           host,
-          port,
+          port = '0',
           wallets,
-          configStr,
+          paymentaddress: paymentAddress,
+          plugins = '',
+          // shared with services
+          clientrequestlimit: clientRequestLimit = '0',
+          fee,
+          fetchlimit: fetchLimit = '0',
+          tls = '0',
+        } = mainSection[1];
+        if(!host) return;
+        const serviceNodeData: ServiceNodeData = {
+          pubKey,
+          host,
+          port: Number(port) || this.params.port,
+          wallets: wallets.split(',').map(s => s.trim()).filter(s => s),
+          plugins: plugins !== '0' ? plugins.split(',').map(s => s.trim()).filter(s => s) : [],
           xrouterVersion,
+          fee,
+          clientRequestLimit: Number(clientRequestLimit),
+          fetchLimit: Number(fetchLimit),
+          paymentAddress,
+          tls: tls === 'true' || tls === '1',
+          services: [],
+          exrCompatible: false,
+          lastPingTime: pingTime,
         };
         const sn = new ServiceNode(serviceNodeData);
+        const serviceInstances = serviceSections
+          .map(([name, options]) => new Service({
+            name,
+            clientRequestLimit: options.clientrequestlimit ? Number(options.clientrequestlimit) : serviceNodeData.clientRequestLimit,
+            fetchLimit: options.fetchlimit ? Number(options.fetchLimit) : serviceNodeData.fetchLimit,
+            disabled: options.disabled && options.disabled === '0' ? true : false,
+            fee: options.fee || sn.fee,
+            help: options.help,
+          }))
+          .reduce((obj: {[name: string]: Service}, svc: Service) => {
+            obj[svc.name] = svc;
+            return obj;
+          }, {});
+
+        for(const wallet of sn.wallets) {
+          for(const method of Object.keys(XRouter.spvCalls)) {
+            const combined = `${wallet.toUpperCase()}::${method}`;
+            if(!serviceInstances[combined]) { // if the service isn't already in the list
+              if (serviceInstances[method]) { // if the method is already in the list
+                serviceInstances[combined] = new Service({
+                  ...serviceInstances[method],
+                  name: combined,
+                });
+              } else {
+                serviceInstances[combined] = new Service({
+                  name: combined,
+                  clientRequestLimit: sn.clientRequestLimit,
+                  fetchLimit: sn.fetchLimit,
+                  fee: sn.fee,
+                  help: '',
+                  disabled: false,
+                });
+              }
+            }
+          }
+        }
+
+        for(const plugin of sn.plugins) {
+          const combined = `xrs::${plugin}`;
+          if(!serviceInstances[combined]) { // if the service isn't already in the list
+            serviceInstances[combined] = new Service({
+              name: combined,
+              clientRequestLimit: sn.clientRequestLimit,
+              fetchLimit: sn.fetchLimit,
+              fee: sn.fee,
+              help: '',
+              disabled: false,
+            });
+          }
+        }
+
+        sn.services = Object.values(serviceInstances)
+          .filter(svc => !svc.disabled);
+
         const idx = this.snodes.findIndex(n => n.pubKey === sn.pubKey);
         if(idx >= 0) {
           this.snodes[idx] = sn;
         } else {
-          console.log(sn);
+          // console.log(sn);
           this.snodes.push(sn);
         }
       }
@@ -146,93 +237,6 @@ export class XRouter {
 
     this.peerMgr = peerMgr;
 
-    // const peerMgr = new PeerManager({
-    //   magic: params.networkMagic,
-    //   port: params.port,
-    //   minPeers: 10,
-    //   maxPeers: 1000,
-    // });
-    // peerMgr.on('error', (res: {severity: string, message: string}): void => {
-    //   this._errLog(`${res.severity}: ${res.message}`);
-    // });
-    // peerMgr.on('peerConnect', (res: {peer: any}) => {
-    //   // console.log(res.peer);
-    //   const { host } = res.peer;
-    //   console.log(host.host + ':' + host.port);
-    //   // this._log('peerConnect: ' + res.peer.host + ' ' + res.peer.port);
-    //   // this._log('peerConnect: ' + res.peer.getUUID());
-    //   // setInterval(() => {
-    //   //   console.log(res.peer.inbound.toString());
-    //   // }, 1000);
-    //   const { peer } = res;
-    //   peer.on('connect', (d: any): void => {
-    //     console.log(d);
-    //   });
-    //   peer.on('snp', (d: any): void => {
-    //     console.error('snp', d.peer.getUUID());
-    //   });
-    //   peer.on('snr', (d: any): void => {
-    //     console.error('snr', d.peer.getUUID());
-    //   });
-    //   peer.on('end', (d: any): void => {
-    //     console.error('end', d.peer.getUUID());
-    //   });
-    //   peer.on('error', (d: any): void => {
-    //     console.log('error', d.error);
-    //   });
-    //   peer.on('pong', (d: any): void => {
-    //     console.error('pong', d);
-    //   });
-    //   peer.on('data', (d: any): void => {
-    //     console.error('data', d);
-    //   });
-    //   peer.on('message', (res: {peer: Peer, command: string}) => {
-    //     this._log('message' + res);
-    //   });
-    //   // peer.send('snr', undefined, (res: any): void => {
-    //   //   console.log('res', res);
-    //   // });
-    //   const payload = JSON.stringify({
-    //     version: 7000,
-    //     services: Buffer(8).fill(0),
-    //     timestamp: Math.round(Date.now() / 1000),
-    //     receiverAddress: {
-    //       services: Buffer('0100000000000000', 'hex'),
-    //       address: '0.0.0.0',
-    //       port: 8333
-    //     },
-    //     senderAddress: {
-    //       services: Buffer(8).fill(0),
-    //       address: '0.0.0.0',
-    //       port: 8333
-    //     },
-    //     nonce: Buffer(8).fill(123),
-    //     userAgent: 'Node P2P',
-    //     startHeight: 0,
-    //     relay: true,
-    //   });
-    //   peer.send('version', payload, (res: any): void => {
-    //     console.log('res', res);
-    //   });
-    // });
-    // peerMgr.on('peerEnd', (res: {peer: Peer}) => {
-    //   this._log('peerEnd: ' + res.peer.getUUID());
-    // });
-    // peerMgr.on('peerMessage', (res: {peer: Peer, command: string}) => {
-    //   this._log('peerMessage' + res.peer.getUUID());
-    // });
-    // peerMgr.on('peerError', (res: {peer: Peer, command: string, data: any}) => {
-    //   this._log('peerError' + res.peer.getUUID());
-    // });
-    // peerMgr.on('commandMessage', (res: {peer: Peer, command: string}) => {
-    //   this._log('commandMessage' + res.peer.getUUID());
-    // });
-    // peerMgr.on('getXRNodeConfig', (status: {numActive: number, poolSize: number, badPeers: any}) => {
-    //   this.started = status.numActive > 0;
-    //   console.log(`numActive: ${status.numActive}, poolSize: ${status.poolSize}, badPeers: ${Object.keys(status.badPeers).length}`);
-    //   // console.log(Object.keys(status.badPeers).length);
-    // });
-    // this.peerMgr = peerMgr;
     if(log)
       this._log = log;
     if(errLog)
@@ -243,23 +247,9 @@ export class XRouter {
     if(!this.started) {
       this._log('Starting XRouter client');
 
-      // Connect to peers
-      // const { dnsSeeds } = this.params;
-      // let addresses: string[] = [];
-      // for(const seed of dnsSeeds) {
-      //   try {
-      //     const res = await dnsLookup(seed);
-      //     addresses = addresses.concat(res);
-      //   } catch(err) {
-      //     this._errLog(`${err.message} \n ${err.stack}`);
-      //   }
-      // }
-      // console.log(addresses);
-      // this.peerMgr.addPool(addresses);
-
       setInterval(() => {
         this._log(this.peerMgr.inspect());
-      }, 5000);
+      }, 10000);
 
       this.peerMgr.connect();
 
