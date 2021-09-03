@@ -15,6 +15,7 @@ export interface ServiceNodeData {
   clientRequestLimit: number;
   fetchLimit: number,
   lastPingTime: number,
+  lastRequestTime?: number;
 }
 
 export class ServiceNode {
@@ -33,6 +34,7 @@ export class ServiceNode {
   fetchLimit = 0;
   paymentAddress = '';
   lastPingTime = 0;
+  lastRequestTime = 0;
 
   constructor(config: ServiceNodeData) {
     const keys = new Set(Object.keys(config));
@@ -50,13 +52,33 @@ export class ServiceNode {
     if(keys.has('fetchLimit')) this.fetchLimit = config.fetchLimit || this.fetchLimit;
     if(keys.has('fee')) this.fee = config.fee || this.fee;
     if(keys.has('lastPingTime')) this.lastPingTime = config.lastPingTime || this.lastPingTime;
+    if(keys.has('lastRequestTime')) this.lastRequestTime = config.lastRequestTime || this.lastRequestTime;
   }
 
   endpoint(): string {
     const host = this.host;
-    const port = this.port;
     const tls = this.tls;
+    const port = tls ? 443 : this.port;
     return `${tls ? 'https' : 'http'}://${host}${port ? `:${port}` : ''}`;
+  }
+
+  private serviceIndexes: {[name: string]: number} = {};
+
+  addService(service: Service): void {
+    const newLength = this.services.push(service);
+    this.serviceIndexes[service.name] = newLength - 1;
+  }
+
+  hasService(name: string, maxFee = 0): boolean {
+    const idx = this.serviceIndexes[name];
+    return this.exrCompatible
+      && idx >= 0
+      && Number(this.services[idx].fee) <= maxFee;
+  }
+
+  getService(name: string): Service {
+    const idx = this.serviceIndexes[name];
+    return this.services[idx];
   }
 
 }

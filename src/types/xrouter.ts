@@ -3,42 +3,18 @@ import { Peer } from 'p2p-node';
 import { Pool } from '../bitcore-p2p/lib';
 import { ServiceNode, ServiceNodeData } from './service-node';
 import { Service } from "./service";
-
-// import { dnsLookup } from '../util';
-// import { PeerManager } from 'p2p-manager';
-// import request from 'superagent';
-// import shuffle from 'lodash/shuffle';
-// import uniq from 'lodash/uniq';
-// import { ServiceNode } from './service-node';
-
-// interface PeerState {
-//   inboundPeers: any,
-//   outbondPeers: any,
-//   persistentPeers: any,
-//   banned: any,
-//   outboundGroups: any,
-// }
-
-const headerPatt = /\[(.+)]/;
-const splitIntoSections = (splitConfig: string[][]): [string, {[key: string]: string}][] => {
-  const sections: [string, {[key: string]: any}][] = [];
-  for(const [key, value] of splitConfig) {
-    if(headerPatt.test(key)) {
-      // @ts-ignore
-      const matches = key.match(headerPatt) || [];
-      const newKey = matches[1];
-      if(newKey)
-        sections.push([newKey, {}]);
-    } else if(sections.length > 0) {
-      const lastIdx = sections.length - 1;
-      sections[lastIdx][1][key] = value;
-    }
-  }
-  return sections;
-};
+import request from 'superagent';
+import isNull from 'lodash/isNull';
+import shuffle from 'lodash/shuffle';
+import {mostCommonReply, splitIntoSections} from "../util";
+import {blockMainnet} from "../networks/block";
 
 interface XrouterOptions {
-  maxPeers: number;
+  network?: NetworkParams,
+  maxPeers?: number;
+  maxFee?: number;
+  queryNum?: number;
+  timeout?: number;
 }
 
 export class XRouter {
@@ -95,30 +71,43 @@ export class XRouter {
   params: NetworkParams;
   started = false;
   snodes: ServiceNode[] = [];
-
+  queryNum: number;
+  maxFee: number;
+  timeout: number;
+  maxPeers: number;
   _timeout = 30000;
-  _log(message: string): void {
+
+  _logInfo(message: string): void {
     console.log(message);
   }
-  _errLog(message: string): void {
+  _logErr(message: string): void {
     console.error(message);
   }
 
-  constructor(params: NetworkParams, options: XrouterOptions, log:(message: string)=>void, errLog:(message: string)=>void) {
-    const { maxPeers = 8 } = options;
-    this.params = params;
+  constructor(options: XrouterOptions, logInfo:(message: string)=>void, logErr:(message: string)=>void) {
+    const {
+      network = blockMainnet,
+      maxPeers = 8,
+      maxFee = 0,
+      queryNum = 3,
+      timeout = 10000,
+    } = options;
+    this.maxPeers = maxPeers;
+    this.maxFee = maxFee;
+    this.queryNum = queryNum;
+    this.timeout = timeout;
+    this.params = network;
     const peerMgr: Pool = new Pool({
       maxSize: maxPeers,
     });
     peerMgr.on('peerconnect', (peer: Peer) => {
-      this._log(`Connect! ${peer.host}`);
+      this._logInfo(`Connect! ${peer.host}`);
     });
     peerMgr.on('peerdisconnect', (peer: Peer) => {
-      console.log(`Disconnect. ${peer.host}`);
+      this._logInfo(`Disconnect. ${peer.host}`);
       this.started = peerMgr.numberConnected() > 0;
     });
     peerMgr.on('peersnp', (peer: Peer, message: any) => {
-      // console.log('snp', message);
       if(message.config && message.config.xrouter && message.config.xrouter.config) {
         const { pubKey: pubKeyRaw, pingTime } = message;
         const pubKey = pubKeyRaw.toString('hex');
@@ -131,9 +120,6 @@ export class XRouter {
           .filter((s: string) => !/^#/.test(s))
           .map((s: string): string[] => s.split('=').map(ss => ss.trim()));
         const sections = splitIntoSections(splitConfig);
-        // console.log(sections);
-        // const configStr = message.config.xrouter;
-        // console.log('configStr', configStr);
         const mainIdx = sections.findIndex((arr) => arr[0] === 'Main');
         if(mainIdx < 0) return;
         const mainSection = sections[mainIdx];
@@ -142,7 +128,7 @@ export class XRouter {
         const {
           // main specific
           host,
-          port = '0',
+          port: portStr = '0',
           wallets,
           paymentaddress: paymentAddress,
           plugins = '',
@@ -153,10 +139,11 @@ export class XRouter {
           tls = '0',
         } = mainSection[1];
         if(!host) return;
+        const port = Number(portStr)|| this.params.port;
         const serviceNodeData: ServiceNodeData = {
           pubKey,
           host,
-          port: Number(port) || this.params.port,
+          port,
           wallets: wallets.split(',').map(s => s.trim()).filter(s => s),
           plugins: plugins !== '0' ? plugins.split(',').map(s => s.trim()).filter(s => s) : [],
           xrouterVersion,
@@ -166,10 +153,14 @@ export class XRouter {
           paymentAddress,
           tls: tls === 'true' || tls === '1',
           services: [],
-          exrCompatible: false,
+          exrCompatible: port !== this.params.port,
           lastPingTime: pingTime,
         };
-        const sn = new ServiceNode(serviceNodeData);
+        const idx = this.snodes.findIndex(n => n.pubKey === pubKey);
+        const sn = new ServiceNode({
+          ...(idx >= 0 ? this.snodes[idx] : {}),
+          ...serviceNodeData,
+        });
         const serviceInstances = serviceSections
           .map(([name, options]) => new Service({
             name,
@@ -221,14 +212,13 @@ export class XRouter {
           }
         }
 
-        sn.services = Object.values(serviceInstances)
-          .filter(svc => !svc.disabled);
-
-        const idx = this.snodes.findIndex(n => n.pubKey === sn.pubKey);
+        for(const svc of Object.values(serviceInstances)) {
+          if(!svc.disabled)
+            sn.addService(svc);
+        }
         if(idx >= 0) {
           this.snodes[idx] = sn;
         } else {
-          // console.log(sn);
           this.snodes.push(sn);
         }
       }
@@ -237,19 +227,19 @@ export class XRouter {
 
     this.peerMgr = peerMgr;
 
-    if(log)
-      this._log = log;
-    if(errLog)
-      this._errLog = errLog;
+    if(logInfo)
+      this._logInfo = logInfo;
+    if(logErr)
+      this._logErr = logErr;
   }
 
   async start(): Promise<boolean> {
     if(!this.started) {
-      this._log('Starting XRouter client');
+      this._logInfo('Starting XRouter client');
 
       setInterval(() => {
-        this._log(this.peerMgr.inspect());
-      }, 10000);
+        this._logInfo(this.peerMgr.inspect());
+      }, 30000);
 
       this.peerMgr.connect();
 
@@ -263,165 +253,90 @@ export class XRouter {
         }, 2000);
         const timeout = setTimeout(() => {
           clearInterval(interval);
-          this._errLog('Unable to connect to any peers.');
+          this._logErr('Unable to connect to any peers.');
         }, this._timeout);
       });
     }
     if(this.started) {
-      this._log('XRouter is ready');
+      this._logInfo('XRouter is ready');
     }
 
     return this.started;
   }
 
-  // getAvailableServices(wallet: string): Promise<string[]> {
-  //   const peers = this.peerMgr.activePeers();
-  //   let availableServices: string[] = [];
-  //   for(const peer of peers) {
-  //     const { splitXrouterConfig = [] } = peer;
-  //     const walletsIdx: number = splitXrouterConfig.findIndex((arr: [string]) => arr[0] === 'wallets');
-  //     if(walletsIdx < 0) continue;
-  //     const wallets: string[] = (splitXrouterConfig[walletsIdx][1] || '')
-  //       .split(',')
-  //       .map((w: string) => w.trim())
-  //       .filter((w: string) => w);
-  //     if(wallets.includes(wallet)) {
-  //       const servicePatt = /^\[(.+)]$/;
-  //       const services: string[] = splitXrouterConfig
-  //         .slice(walletsIdx + 1)
-  //         .map((a: string[]) => a[0] || '')
-  //         .filter((s: string) => s)
-  //         .filter((s: string) => servicePatt.test(s))
-  //         .map((s: string) => s.replace(servicePatt, '$1'));
-  //       availableServices = availableServices.concat(services);
-  //     }
-  //   }
-  //   return uniq(availableServices);
-  // }
+  combineWithDelim(str1: string, str2: string): string {
+    return str1 + XRouter.namespaces.xrdelim + str2;
+  }
 
-  // getAvailableWallets(): [string, Peer[]][] {
-  //   const peers = this.peerMgr.activePeers()
-  //     .filter((p: Peer) => p.xrHost && p.xrPort);
-  //   // let availableWallets: [string, Peer[]][] = [];
-  //   const availableWallets: any = {};
-  //   for(const peer of peers) {
-  //     const { splitXrouterConfig = [] } = peer;
-  //     const walletsIdx: number = splitXrouterConfig.findIndex((arr: [string]) => arr[0] === 'wallets');
-  //     if(walletsIdx < 0) continue;
-  //     const wallets: string[] = (splitXrouterConfig[walletsIdx][1] || '')
-  //       .split(',')
-  //       .map((w: string) => w.trim())
-  //       .filter((w: string) => w);
-  //     for(const wallet of wallets) {
-  //       const availablePeers = availableWallets[wallet] || [];
-  //       availableWallets[wallet] = [...availablePeers, peer];
-  //     }
-  //   }
-  //   return Object.keys(availableWallets)
-  //     .map(wallet => [wallet, availableWallets[wallet]]);
-  // }
+  getSnodesByXrService(serviceName: string): ServiceNode[] {
+    return this.snodes
+      .filter(sn => sn.hasService(serviceName, this.maxFee));
+  }
 
-  // async getBlockCount(service: string, query = 5): Promise<number> {
-  //   const ns = XRouter.namespaces.xr;
-  //   const xrFunc = XRouter.spvCalls.xrGetBlockCount;
-  //   const nsService = XRouter.addNamespace(service, ns);
-  //   const wallet = nsService.split('::')[1];
-  //   // console.log('nsService', nsService);
-  //   // console.log('nxService', XRouter.removeNamespace(nsService));
-  //   const availableWallets = this.getAvailableWallets();
-  //   const found = availableWallets.find(w => w[0] === wallet) || [];
-  //   const peers = found[1] || [];
-  //   // console.log('peers', peers);
-  //   // const shuffled = shuffle(peers).slice(0, query);
-  //   const shuffled = peers;
-  //   // console.log('shuffled', shuffled);
-  //   shuffled.forEach((p: Peer) => console.log(p.host, p.xrHost, p.splitXrouterConfig.length));
-  //   const responses = await Promise.all(shuffled.map((peer: Peer) => new Promise(resolve => {
-  //     // const { body }: {body: {error: any, id: string, result: {reply: number, uuid: string}}} = await request
-  //     const responses = [];
-  //     // console.log(`http://${peer.xrHost}:${peer.xrPort}`);
-  //     // request
-  //     //   .post(`http://${peer.xrHost}:${peer.xrPort}`)
-  //     //   // .auth('BlockDXBlocknet', '217691ec-4cce-4f50-b397-ab9acbf1540d')
-  //     //   .send({
-  //     //     id: '',
-  //     //     method: xrFunc,
-  //     //     params: [nsService, query],
-  //     //   })
-  //     //   .then((res): void => {
-  //     //     const { body } = res;
-  //     //     resolve(0);
-  //     //   })
-  //     //   .catch(err => {
-  //     //     console.error(err);
-  //     //     resolve(0);
-  //     //   });
-  //     resolve(0);
-  //   })));
-  //
-  //   console.log(responses);
-  //
-  //   return 0;
-  //
-  //   // const endpoint = `/${ns}/${XRouter.removeNamespace(nsService)}/${xrFunc}`;
-  //
-  //   // this.peerMgr.send(query, 'state', 'connected', 'xrouterversion', Buffer.from([]), '12345', res => console.log('res', res));
-  //
-  //   // this.peerMgr.send(query, 'state', 'connected', 'version', new Buffer(''), '12345', res => console.log('res', res));
-  //   // const responseArr = await Promise.all(Object.values(this.peerMgr.activePeers)
-  //   //   .map(({ host }: Peer) => {
-  //   //     const path = `http://${host.host}:${host.port}${endpoint}`;
-  //   //     console.log('path', path);
-  //   //     return request
-  //   //       .post(path)
-  //   //       .timeout(this._timeout)
-  //   //       .set('Content-Type', 'application/json')
-  //   //       .send([]);
-  //   //   }));
-  //   // console.log(responseArr);
-  // }
+  async getBlockCount(wallet: string, query = this.queryNum): Promise<number> {
+    const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlockCount);
+    const res = await this.callService(
+      XRouter.namespaces.xr,
+      serviceName,
+      [],
+      query
+    );
+    if(typeof res !== 'number')
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+      throw new Error(`bad getBlockCount response of: ${res}`);
+    return res;
+  }
 
-  async callService(command: string, params: any, query: number): Promise<any> {
-    // if(staticServiceNodes.length > 0) { // only use provided endpoints
-    //   const sliced = shuffle(staticServiceNodes).slice(0, query);
-    //   const res = await Promise.all(sliced
-    //     .map(sn => new Promise(resolve => {
-          // const { body }: {body: {error: any, id: string, result: {reply: number, uuid: string}}} =
-          // request
-          //   .post('127.0.0.1:41414')
-          //   .auth('BlockDXBlocknet', '217691ec-4cce-4f50-b397-ab9acbf1540d')
-          //   .send({
-          //     id: '',
-          //     method: xrFunc,
-          //     params: [nsService, query],
-          //   });
-        // })));
-    // } else { // use peer pool
-
-    // }
-    // if(noEXR) { // do not connect via EXR
-      // const shuffled = shuffle(staticEndpoints);
-
-    // } else { // connect via EXR
-
-    // }
-    // console.log(this.peerMgr.activePeers);
-    // console.log(Object.values(this.peerMgr.activePeers).map(({ host }: Peer) => `${host.host}:${host.port}`));
-
-    // console.log(Object.values(this.peerMgr.activePeers).map((p: Peer) => p.state));
-
-    // this.peerMgr.send(query, 'state', 'connected', 'xrGetConfig', Buffer.from(''), '12345', res => console.log('res', res));
-
-    // const responseArr = await Promise.all(Object.values(this.peerMgr.activePeers)
-    //   .map(({ host }: Peer) => {
-    //     const path = `http://${host.host}:${host.port}/${command}`;
-    //     console.log('path', path);
-    //     return request
-    //       .post(path)
-    //       .set('Content-Type', 'application/json')
-    //       .send(JSON.stringify(params));
-    //   }));
-    // console.log(responseArr);
+  async callService(namespace: string, serviceName: string, params: any[], query: number): Promise<any> {
+    this._logInfo(`call service ${serviceName}`);
+    const snodes = this.getSnodesByXrService(serviceName);
+    this._logInfo(`${snodes.length} snodes serving ${serviceName}`);
+    const filteredSnodes = shuffle(snodes)
+      .filter(snode => {
+        if(snode.clientRequestLimit && snode.lastRequestTime) {
+          return Date.now() - snode.lastRequestTime > snode.clientRequestLimit;
+        } else {
+          return true;
+        }
+      });
+    this._logInfo(`${snodes.length} snodes ready for ${serviceName}`);
+    const responseArr = await Promise.all(filteredSnodes
+      .slice(0, query)
+      .map((snode: ServiceNode) => new Promise(resolve => {
+        let path = '';
+        if(namespace === XRouter.namespaces.xr) {
+          const [ wallet, xrFunc ] = serviceName.split(XRouter.namespaces.xrdelim);
+          path = `${snode.endpoint()}/${namespace}/${wallet}/${xrFunc}`;
+        } else if(namespace === XRouter.namespaces.xrs) {
+          path = `${snode.endpoint()}/${namespace}/${serviceName}`;
+        }
+        const jsonPayload = JSON.stringify(params);
+        this._logInfo(`POST to ${path} with params ${jsonPayload}`);
+        request
+          .post(path)
+          .set('Content-Type', 'application/json')
+          .send(jsonPayload)
+          .timeout(this.timeout)
+          .then(res => {
+            snode.lastRequestTime = Date.now();
+            const { body } = res;
+            try {
+              this._logInfo(`${serviceName} response from ${snode.host} ${JSON.stringify(body)}`);
+            } catch(err) {
+              // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
+              this._logErr(err.message + '\n' + err.stack);
+            }
+            resolve(body);
+          })
+          .catch(err => {
+            snode.lastRequestTime = Date.now();
+            // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
+            this._logErr(err.message + '\n' + err.stack);
+            resolve(null);
+          });
+      })));
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return mostCommonReply(responseArr);
   }
 
 }
