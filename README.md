@@ -26,6 +26,12 @@ const xrClient = new XRouter(
 );
 ```
 
+## Starting the XRouter server
+```js
+start(): Promise<boolean>;
+// e.g. xrClient.start().then(ready => console.log(`Ready: ${ready}`)).catch(console.error);
+```
+
 ## XRouter Instance SPV Methods
 ```js
 getBlockCount(wallet: string, query: number): Promise<number>;
