@@ -6,7 +6,6 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
-    "test-peering": "node test.js",
     "test": "ts-mocha -p ./tsconfig.json src/**/*.spec.ts"
   },
   "repository": {
