@@ -16,18 +16,6 @@
     "eol-last": 1,
     "func-call-spacing": [1, "never"],
     "func-style": [2, "expression"],
-    "keyword-spacing": [1, {
-      "after": false,
-      "before": true,
-      "overrides": {
-        "case": {
-          "after": true
-        },
-        "else": {
-          "after": true
-        }
-      }
-    }],
     "new-cap": 2,
     "quotes": [1, "single"],
     "semi": 1,
@@ -37,6 +25,11 @@
       "named": "never",
       "asyncArrow": "always"
     }],
-    "@typescript-eslint/semi": 1
+    "@typescript-eslint/semi": 1,
+    "@typescript-eslint/no-explicit-any": 0,
+    "@typescript-eslint/no-unsafe-call": 0,
+    "@typescript-eslint/no-unsafe-assignment": 0,
+    "@typescript-eslint/no-unsafe-member-access": 0,
+    "@typescript-eslint/prefer-regexp-exec": 0
   }
 }
