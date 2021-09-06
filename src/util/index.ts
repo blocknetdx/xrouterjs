@@ -55,7 +55,9 @@ export const mostCommonReply = (items: any[]): any => {
     }, {});
   const sortedSerialized = Object.keys(serializedItems)
     .sort((a, b) => {
-      return a === b ? 0 : a > b ? -1 : 1;
+      const numA = serializedItems[a];
+      const numB = serializedItems[b];
+      return numA === numB ? 0 : numA > numB ? -1 : 1;
     });
   if(sortedSerialized[0]) {
     try {

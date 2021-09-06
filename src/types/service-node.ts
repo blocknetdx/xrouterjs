@@ -1,4 +1,4 @@
-import { Service } from "./service";
+import { Service } from './service';
 
 export interface ServiceNodeData {
   pubKey: string;
@@ -16,9 +16,16 @@ export interface ServiceNodeData {
   fetchLimit: number,
   lastPingTime: number,
   lastRequestTime?: number;
+  statusWarningTimeoutLength?: number;
 }
 
 export class ServiceNode {
+
+  static status = {
+    GOOD: 'GOOD',
+    WARNING: 'WARNING',
+    BAD: 'BAD',
+  };
 
   pubKey = '';
   host = '';
@@ -35,8 +42,11 @@ export class ServiceNode {
   paymentAddress = '';
   lastPingTime = 0;
   lastRequestTime = 0;
+  status = ServiceNode.status.GOOD;
+  statusWarningTimeoutLength = 86400000; // 24 hrs in milliseconds
+  statusWarningTimeout?: ReturnType<typeof setTimeout>;
 
-  constructor(config: ServiceNodeData) {
+  constructor(config: ServiceNodeData, logInfo = console.log) {
     const keys = new Set(Object.keys(config));
     if(keys.has('pubKey')) this.pubKey = config.pubKey || this.pubKey;
     if(keys.has('host')) this.host = config.host || this.host;
@@ -53,6 +63,12 @@ export class ServiceNode {
     if(keys.has('fee')) this.fee = config.fee || this.fee;
     if(keys.has('lastPingTime')) this.lastPingTime = config.lastPingTime || this.lastPingTime;
     if(keys.has('lastRequestTime')) this.lastRequestTime = config.lastRequestTime || this.lastRequestTime;
+    if(keys.has('statusWarningTimeoutLength')) this.statusWarningTimeoutLength = config.statusWarningTimeoutLength || this.statusWarningTimeoutLength;
+    if(logInfo) this._logInfo = logInfo;
+  }
+
+  _logInfo(message: string): void {
+    console.log(message);
   }
 
   endpoint(): string {
@@ -79,6 +95,43 @@ export class ServiceNode {
   getService(name: string): Service {
     const idx = this.serviceIndexes[name];
     return this.services[idx];
+  }
+
+  timeToReady(): number {
+    const { clientRequestLimit, lastRequestTime } = this;
+    const now = Date.now();
+    if(clientRequestLimit && lastRequestTime) {
+      const diff = lastRequestTime + clientRequestLimit - now;
+      return diff > 0 ? diff : 0;
+    } else {
+      return 0;
+    }
+  }
+
+  isReady(): boolean {
+    return this.timeToReady() === 0 && this.status !== ServiceNode.status.BAD;
+  }
+
+  setStatus(status: string): void {
+    this._logInfo(`${this.host} status set to ${status}`);
+    if(this.statusWarningTimeout)
+      clearTimeout(this.statusWarningTimeout);
+    this.status = status;
+  }
+
+  downgradeStatus(): void {
+    const { status } = this;
+    if(this.statusWarningTimeout)
+      clearTimeout(this.statusWarningTimeout);
+    if(status === ServiceNode.status.GOOD) {
+      this.status = ServiceNode.status.WARNING;
+      this.statusWarningTimeout = setTimeout(() => {
+        this.status = ServiceNode.status.GOOD;
+      }, this.statusWarningTimeoutLength);
+    } else if(status === ServiceNode.status.WARNING) {
+      this.status = ServiceNode.status.BAD;
+    }
+    this._logInfo(`${this.host} status downgraded to ${this.status}`);
   }
 
 }

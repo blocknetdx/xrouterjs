@@ -70,6 +70,7 @@ export class XRouter {
   peerMgr: Pool;
   params: NetworkParams;
   started = false;
+  ready = false;
   snodes: ServiceNode[] = [];
   queryNum: number;
   maxFee: number;
@@ -89,7 +90,7 @@ export class XRouter {
       network = blockMainnet,
       maxPeers = 8,
       maxFee = 0,
-      queryNum = 3,
+      queryNum = 5,
       timeout = 10000,
     } = options;
     this.maxPeers = maxPeers;
@@ -101,10 +102,10 @@ export class XRouter {
       maxSize: maxPeers,
     });
     peerMgr.on('peerconnect', (peer: Peer) => {
-      this._logInfo(`Connect! ${peer.host}`);
+      this._logInfo(`Connected to ${peer.host}`);
     });
     peerMgr.on('peerdisconnect', (peer: Peer) => {
-      this._logInfo(`Disconnect. ${peer.host}`);
+      this._logInfo(`Disconnected from ${peer.host}`);
       this.started = peerMgr.numberConnected() > 0;
     });
     peerMgr.on('peersnp', (peer: Peer, message: any) => {
@@ -258,10 +259,24 @@ export class XRouter {
       });
     }
     if(this.started) {
+      this._logInfo('XRouter started');
+      await new Promise<void>(resolve => {
+        const nodeCountInterval = setInterval(() => {
+          if(this.exrNodeCount() > 1) {
+            clearInterval(nodeCountInterval);
+            resolve();
+          }
+        }, 1000);
+      });
+      this.ready = true;
       this._logInfo('XRouter is ready');
     }
 
-    return this.started;
+    return this.ready;
+  }
+
+  exrNodeCount(): number {
+    return this.snodes.filter(sn => sn.exrCompatible).length;
   }
 
   combineWithDelim(str1: string, str2: string): string {
@@ -287,19 +302,29 @@ export class XRouter {
     return res;
   }
 
+  async getBlockHash(wallet: string, blockNumber: number, query = this.queryNum): Promise<number|string|null> {
+    const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlockHash);
+    const res = await this.callService(
+      XRouter.namespaces.xr,
+      serviceName,
+      [blockNumber],
+      query
+    );
+    if(typeof res !== 'string')
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+      throw new Error(`bad getBlockHash response of: ${res}`);
+    return res;
+  }
+
   async callService(namespace: string, serviceName: string, params: any[], query: number): Promise<any> {
     this._logInfo(`call service ${serviceName}`);
     const snodes = this.getSnodesByXrService(serviceName);
     this._logInfo(`${snodes.length} snodes serving ${serviceName}`);
     const filteredSnodes = shuffle(snodes)
       .filter(snode => {
-        if(snode.clientRequestLimit && snode.lastRequestTime) {
-          return Date.now() - snode.lastRequestTime > snode.clientRequestLimit;
-        } else {
-          return true;
-        }
+        return snode.isReady();
       });
-    this._logInfo(`${snodes.length} snodes ready for ${serviceName}`);
+    this._logInfo(`${filteredSnodes.length} snodes ready for ${serviceName}`);
     const responseArr = await Promise.all(filteredSnodes
       .slice(0, query)
       .map((snode: ServiceNode) => new Promise(resolve => {
@@ -316,22 +341,47 @@ export class XRouter {
           .post(path)
           .set('Content-Type', 'application/json')
           .send(jsonPayload)
+          .buffer(true)
+          .parse((res, cb) => {
+            let text = '';
+            res.on('data', buf => {
+              // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+              text = `${text}${buf.toString()}`;
+            });
+            res.on('end', () => {
+              Object.assign(res, {text});
+              cb(null, res);
+            });
+          })
           .timeout(this.timeout)
           .then(res => {
             snode.lastRequestTime = Date.now();
-            const { body } = res;
+            const { text } = res;
+            let parsedJson: any;
             try {
-              this._logInfo(`${serviceName} response from ${snode.host} ${JSON.stringify(body)}`);
+              parsedJson = JSON.parse(text);
+            } catch(err) {
+              parsedJson = text;
+            }
+            // ToDo check response signatures
+            const xrPubKey = res.headers['xr-pubkey'];
+            const xrSignature = res.headers['xr-signature'];
+            try {
+              this._logInfo(`${serviceName} response from ${snode.host} ${text}`);
             } catch(err) {
               // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
               this._logErr(err.message + '\n' + err.stack);
             }
-            resolve(body);
+            resolve(parsedJson);
           })
           .catch(err => {
             snode.lastRequestTime = Date.now();
-            // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
-            this._logErr(err.message + '\n' + err.stack);
+            if(/Timeout/.test(err.message)) {
+              snode.downgradeStatus();
+            } else {
+              // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
+              this._logErr(err.message + '\n' + err.stack);
+            }
             resolve(null);
           });
       })));
