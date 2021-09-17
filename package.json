@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
+    "example": "node example",
     "test": "ts-mocha -p ./tsconfig.json src/**/*.spec.ts"
   },
   "repository": {

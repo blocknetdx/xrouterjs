@@ -9,6 +9,55 @@ import shuffle from 'lodash/shuffle';
 import {mostCommonReply, splitIntoSections} from "../util";
 import {blockMainnet} from "../networks/block";
 
+interface BlockData {
+  hash: string;
+  confirmations: number;
+  size: number;
+  height: number;
+  version: number;
+  versionHex: string;
+  merkleroot: string;
+  tx: string[];
+  time: number;
+  mediantime: number;
+  nonce: number;
+  bits: string;
+  difficulty: number;
+  chainwork: string;
+  previousblockhash: string;
+  nextblockhash: string;
+  auxpow: {
+    tx: {
+      hex: string;
+      txid: string;
+      size: number;
+      version: number;
+      locktime: number;
+      vin: {
+        coinbase: string;
+        sequence: number;
+      }[];
+      vout: {
+        value: number;
+        valueSat: number;
+        n: number;
+        scriptPubKey: {
+          asm: string;
+          hex: string;
+          reqSigs: number;
+          type: string;
+          addresses: string[];
+        }
+      }[]
+    },
+    index: number;
+    chainindex: number;
+    merklebranch: string[];
+    chainmerklebranch: string[];
+    parentblock: string;
+  }
+}
+
 interface XrouterOptions {
   network?: NetworkParams,
   maxPeers?: number;
@@ -316,6 +365,54 @@ export class XRouter {
     return res;
   }
 
+  async getBlock(wallet: string, blockHash: string, query = this.queryNum): Promise<BlockData> {
+    const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlock);
+    const res = await this.callService(
+      XRouter.namespaces.xr,
+      serviceName,
+      [blockHash],
+      query
+    );
+    if(isNull(res) || typeof res !== 'object')
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+      throw new Error(`bad getBlockHash response of: ${res}`);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return {
+      hash: res.hash || '',
+      confirmations: res.confirmations || 0,
+      size: res.size || 0,
+      height: res.height || 0,
+      version: res.version || 0,
+      versionHex: res.versionHex || '',
+      merkleroot: res.merkleroot || '',
+      tx: res.tx  || [],
+      time: res.time || 0,
+      mediantime: res.mediantime || 0,
+      nonce: res.nonce || 0,
+      bits: res.bits || '',
+      difficulty: res.difficulty || 0,
+      chainwork: res.chainwork || '',
+      previousblockhash: res.previousblockhash || '',
+      nextblockhash: res.nextblockhash || '',
+      auxpow: res.auxpow || {
+        tx: {
+          hex: '',
+          txid: '',
+          size: 0,
+          version: 0,
+          locktime: 0,
+          vin: [],
+          vout: [],
+        },
+        index: 0,
+        chainindex: 0,
+        merklebranch: [],
+        chainmerklebranch: [],
+        parentblock: '',
+      },
+    };
+  }
+
   async callService(namespace: string, serviceName: string, params: any[], query: number): Promise<any> {
     this._logInfo(`call service ${serviceName}`);
     const snodes = this.getSnodesByXrService(serviceName);
@@ -366,6 +463,8 @@ export class XRouter {
             // ToDo check response signatures
             const xrPubKey = res.headers['xr-pubkey'];
             const xrSignature = res.headers['xr-signature'];
+            // console.log('xrPubKey', xrPubKey);
+            // console.log('xrSignature', xrSignature);
             try {
               this._logInfo(`${serviceName} response from ${snode.host} ${text}`);
             } catch(err) {
