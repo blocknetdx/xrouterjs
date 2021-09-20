@@ -4,12 +4,13 @@ import { Pool } from '../bitcore-p2p/lib';
 import { ServiceNode, ServiceNodeData } from './service-node';
 import { Service } from "./service";
 import request from 'superagent';
+import isArray from 'lodash/isArray';
 import isNull from 'lodash/isNull';
 import shuffle from 'lodash/shuffle';
 import {mostCommonReply, splitIntoSections} from "../util";
 import {blockMainnet} from "../networks/block";
 
-interface BlockData {
+class BlockData {
   hash: string;
   confirmations: number;
   size: number;
@@ -26,35 +27,23 @@ interface BlockData {
   chainwork: string;
   previousblockhash: string;
   nextblockhash: string;
-  auxpow: {
-    tx: {
-      hex: string;
-      txid: string;
-      size: number;
-      version: number;
-      locktime: number;
-      vin: {
-        coinbase: string;
-        sequence: number;
-      }[];
-      vout: {
-        value: number;
-        valueSat: number;
-        n: number;
-        scriptPubKey: {
-          asm: string;
-          hex: string;
-          reqSigs: number;
-          type: string;
-          addresses: string[];
-        }
-      }[]
-    },
-    index: number;
-    chainindex: number;
-    merklebranch: string[];
-    chainmerklebranch: string[];
-    parentblock: string;
+  constructor(data: any) {
+    this.hash = data.hash || '';
+    this.confirmations = data.confirmations || 0;
+    this.size = data.size || 0;
+    this.height = data.height || 0;
+    this.version = data.version || 0;
+    this.versionHex = data.versionHex || '';
+    this.merkleroot = data.merkleroot || '';
+    this.tx = data.tx || [];
+    this.time = data.time || 0;
+    this.mediantime = data.mediantime || 0;
+    this.nonce = data.nonce || 0;
+    this.bits = data.bits || '';
+    this.difficulty = data.difficulty || 0;
+    this.chainwork = data.chainwork || '';
+    this.previousblockhash = data.previousblockhash || '';
+    this.nextblockhash = data.nextblockhash || '';
   }
 }
 
@@ -76,9 +65,9 @@ export class XRouter {
   };
 
   static spvCalls = {
-    xrGetBlockCount: 'xrGetBlockCount',
-    xrGetBlockHash: 'xrGetBlockHash',
-    xrGetBlock: 'xrGetBlock',
+    xrGetBlockCount: 'xrGetBlockCount', // done
+    xrGetBlockHash: 'xrGetBlockHash', // done
+    xrGetBlock: 'xrGetBlock', // done
     xrGetBlocks: 'xrGetBlocks',
     xrGetTransaction: 'xrGetTransaction',
     xrGetTransactions: 'xrGetTransactions',
@@ -351,7 +340,7 @@ export class XRouter {
     return res;
   }
 
-  async getBlockHash(wallet: string, blockNumber: number, query = this.queryNum): Promise<number|string|null> {
+  async getBlockHash(wallet: string, blockNumber: number, query = this.queryNum): Promise<string> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlockHash);
     const res = await this.callService(
       XRouter.namespaces.xr,
@@ -377,40 +366,22 @@ export class XRouter {
       // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
       throw new Error(`bad getBlockHash response of: ${res}`);
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return {
-      hash: res.hash || '',
-      confirmations: res.confirmations || 0,
-      size: res.size || 0,
-      height: res.height || 0,
-      version: res.version || 0,
-      versionHex: res.versionHex || '',
-      merkleroot: res.merkleroot || '',
-      tx: res.tx  || [],
-      time: res.time || 0,
-      mediantime: res.mediantime || 0,
-      nonce: res.nonce || 0,
-      bits: res.bits || '',
-      difficulty: res.difficulty || 0,
-      chainwork: res.chainwork || '',
-      previousblockhash: res.previousblockhash || '',
-      nextblockhash: res.nextblockhash || '',
-      auxpow: res.auxpow || {
-        tx: {
-          hex: '',
-          txid: '',
-          size: 0,
-          version: 0,
-          locktime: 0,
-          vin: [],
-          vout: [],
-        },
-        index: 0,
-        chainindex: 0,
-        merklebranch: [],
-        chainmerklebranch: [],
-        parentblock: '',
-      },
-    };
+    return new BlockData(res);
+  }
+
+  async getBlocks(wallet: string, blockHashes: string[], query = this.queryNum): Promise<BlockData[]> {
+    const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlocks);
+    const res = await this.callService(
+      XRouter.namespaces.xr,
+      serviceName,
+      [...blockHashes],
+      query
+    );
+    if(!isArray(res))
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+      throw new Error(`bad getBlockHash response of: ${res}`);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return res.map(data => new BlockData(data));
   }
 
   async callService(namespace: string, serviceName: string, params: any[], query: number): Promise<any> {

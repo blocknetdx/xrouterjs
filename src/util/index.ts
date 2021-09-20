@@ -1,5 +1,6 @@
 import dns from 'dns';
 import isNull from "lodash/isNull";
+import isUndefined from 'lodash/isUndefined';
 
 export const dnsLookup = (hostname: string): Promise<string[]> => new Promise((resolve, reject) => {
   dns.lookup(
@@ -44,7 +45,7 @@ export const mostCommonReply = (items: any[]): any => {
       }
     })
     .reduce((obj: {[key: string]: number}, serialized: string|null) => {
-      if(isNull(serialized)) {
+      if(isNull(serialized) || serialized === 'null') {
         return obj;
       } else if(obj[serialized]) {
         obj[serialized]++;
