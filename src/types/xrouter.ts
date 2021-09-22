@@ -433,7 +433,7 @@ export class XRouter {
     );
     if(isNull(res) || typeof res !== 'object')
       // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-      throw new Error(`bad getBlockHash response of: ${res}`);
+      throw new Error(`bad getBlock response of: ${res}`);
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return new BlockData(res);
   }
@@ -448,7 +448,7 @@ export class XRouter {
     );
     if(!isArray(res))
       // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-      throw new Error(`bad getBlockHash response of: ${res}`);
+      throw new Error(`bad getBlocks response of: ${res}`);
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return res.map(data => new BlockData(data));
   }
@@ -463,9 +463,24 @@ export class XRouter {
     );
     if(isNull(res) || typeof res !== 'object')
       // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-      throw new Error(`bad getBlockHash response of: ${res}`);
+      throw new Error(`bad getTransaction response of: ${res}`);
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return new Transaction(res);
+  }
+
+  async getTransactions(wallet: string, txids: string[], query = this.queryNum): Promise<Transaction[]> {
+    const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetTransactions);
+    const res = await this.callService(
+      XRouter.namespaces.xr,
+      serviceName,
+      [...txids],
+      query
+    );
+    if(!isArray(res))
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+      throw new Error(`bad getTransactions response of: ${res}`);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return res.map(data => new Transaction(data));
   }
 
   async callService(namespace: string, serviceName: string, params: any[], query: number): Promise<any> {
