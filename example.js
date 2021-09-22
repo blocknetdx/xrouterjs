@@ -47,6 +47,14 @@ const timeout = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
     const blocksData = await client.getBlocks(wallet, [blockData.hash, blockData.previousblockhash], queryNum);
     console.log('blocks data', blocksData);
 
+    await timeout(30000);
+
+    if(blockData.tx.length > 0) {
+      const [ txid ] = blockData.tx;
+      const transaction = await client.getTransaction(wallet, txid, queryNum);
+      console.log('transaction', transaction);
+    }
+
   } catch(err) {
     console.error(err);
   }

@@ -7,8 +7,8 @@ import request from 'superagent';
 import isArray from 'lodash/isArray';
 import isNull from 'lodash/isNull';
 import shuffle from 'lodash/shuffle';
-import {mostCommonReply, splitIntoSections} from "../util";
-import {blockMainnet} from "../networks/block";
+import { mostCommonReply, splitIntoSections } from '../util';
+import { blockMainnet } from '../networks/block';
 
 class BlockData {
   hash: string;
@@ -44,6 +44,75 @@ class BlockData {
     this.chainwork = data.chainwork || '';
     this.previousblockhash = data.previousblockhash || '';
     this.nextblockhash = data.nextblockhash || '';
+  }
+}
+
+// class ScriptSig {
+//   asm: string;
+//   hex: string;
+//   constructor(data: any = {}) {
+//     this.asm = data.asm || '';
+//     this.hex = data.hex || '';
+//   }
+// }
+
+// class Vin {
+//   txid: string;
+//   vout: number;
+//   scriptSig: ScriptSig;
+//   coinbase: string;
+//   sequence: number;
+//   constructor(data: any = {}) {
+//     this.txid = data.txid || '';
+//     this.vout = data.vout || 0;
+//     this.scriptSig = new ScriptSig(data.scriptSig);
+//     this.coinbase = data.coinbase || '';
+//     this.sequence = data.sequence || 0;
+//   }
+// }
+
+// class ScriptPubKey {
+//   asm: string;
+//   hex: string;
+//   reqSigs: number;
+//   type: string;
+//   addresses: string[];
+//   constructor(data: any = {}) {
+//     this.asm = data.asm || '';
+//     this.hex = data.hex || '';
+//     this.reqSigs = data.reqSigs || 0;
+//     this.type = data.type || '';
+//     this.addresses = data.addresses || [];
+//   }
+// }
+
+// class Vout {
+//   value: number;
+//   valueSat: number;
+//   n: number;
+//   scriptPubKey: ScriptPubKey;
+//   constructor(data: any = {}) {
+//     this.value = data.value || 0;
+//     this.valueSat = data.valueSat || 0;
+//     this.n = data.n || 0;
+//     this.scriptPubKey = new ScriptPubKey(data.scriptPubKey);
+//   }
+// }
+
+class Transaction {
+  txid: string;
+  size: number;
+  version: number;
+  locktime: number;
+  vin: any[];
+  vout: any[];
+  constructor(data: any = {}) {
+    this.txid = data.txid || '';
+    this.size = data.size || 0;
+    this.version = data.version || 0;
+    this.locktime = data.locktime || 0;
+    this.vin = data.vin || [];
+    this.vout = data.vout || [];
   }
 }
 
@@ -382,6 +451,21 @@ export class XRouter {
       throw new Error(`bad getBlockHash response of: ${res}`);
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return res.map(data => new BlockData(data));
+  }
+
+  async getTransaction(wallet: string, txid: string, query = this.queryNum): Promise<Transaction> {
+    const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetTransaction);
+    const res = await this.callService(
+      XRouter.namespaces.xr,
+      serviceName,
+      [txid],
+      query
+    );
+    if(isNull(res) || typeof res !== 'object')
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+      throw new Error(`bad getBlockHash response of: ${res}`);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return new Transaction(res);
   }
 
   async callService(namespace: string, serviceName: string, params: any[], query: number): Promise<any> {
