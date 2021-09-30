@@ -50,6 +50,7 @@
     "btc-p2p": "^0.2.0",
     "buffers": "github:bitpay/node-buffers#v0.1.2-bitpay",
     "lodash": "^4.17.21",
+    "mathjs": "^9.5.0",
     "p2p-manager": "^0.1.0",
     "p2p-node": "^0.1.1",
     "socks5-client": "^0.3.6",

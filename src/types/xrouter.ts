@@ -6,9 +6,11 @@ import { Service } from "./service";
 import request from 'superagent';
 import isArray from 'lodash/isArray';
 import isNull from 'lodash/isNull';
+import isString from 'lodash/isString';
 import shuffle from 'lodash/shuffle';
 import { mostCommonReply, splitIntoSections } from '../util';
 import { blockMainnet } from '../networks/block';
+import uniq from 'lodash/uniq';
 
 class BlockData {
   hash: string;
@@ -395,6 +397,35 @@ export class XRouter {
       .filter(sn => sn.hasService(serviceName, this.maxFee));
   }
 
+  listAllAvailableServices() {
+    const { snodes } = this;
+    const exrSnodes = snodes
+      .filter(sn => sn.exrCompatible);
+    return exrSnodes
+      .reduce((map, sn) => {
+        const { services, wallets } = sn;
+        for(const s of services) {
+          const splitName = s.name.split('::');
+          const toAdd = [];
+          if(splitName.length > 1) {
+            toAdd.push([splitName[0], splitName[1]]);
+          } else {
+            for(const wallet of wallets) {
+              toAdd.push([wallet, splitName[0]]);
+            }
+          }
+          for(const [wallet, name] of toAdd) {
+            const prevServices = map.get(wallet) || [];
+            map.set(wallet, uniq([
+              ...prevServices,
+              name,
+            ]).sort());
+          }
+        }
+        return map;
+      }, new Map());
+  }
+
   async getBlockCount(wallet: string, query = this.queryNum): Promise<number> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlockCount);
     const res = await this.callService(
@@ -483,7 +514,25 @@ export class XRouter {
     return res.map(data => new Transaction(data));
   }
 
+  async sendTransaction(wallet: string, signedTx: string, query = 1): Promise<string> {
+    const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrSendTransaction);
+    const res = await this.callService(
+      XRouter.namespaces.xr,
+      serviceName,
+      [signedTx],
+      query
+    );
+    if(!isString(res))
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+      throw new Error(`bad sendTransaction response of: ${res}`);
+    return res;
+  }
+
   async callService(namespace: string, serviceName: string, params: any[], query: number): Promise<any> {
+
+    const servicesMap = this.listAllAvailableServices();
+    console.log(servicesMap);
+
     this._logInfo(`call service ${serviceName}`);
     const snodes = this.getSnodesByXrService(serviceName);
     this._logInfo(`${snodes.length} snodes serving ${serviceName}`);
