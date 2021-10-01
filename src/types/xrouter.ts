@@ -8,6 +8,7 @@ import isArray from 'lodash/isArray';
 import isNull from 'lodash/isNull';
 import isString from 'lodash/isString';
 import shuffle from 'lodash/shuffle';
+import isPlainObject from 'lodash/isPlainObject';
 import { mostCommonReply, splitIntoSections } from '../util';
 import { blockMainnet } from '../networks/block';
 import uniq from 'lodash/uniq';
@@ -142,7 +143,7 @@ export class XRouter {
     xrGetBlocks: 'xrGetBlocks',
     xrGetTransaction: 'xrGetTransaction',
     xrGetTransactions: 'xrGetTransactions',
-    xrDecodeTransaction: 'xrDecodeTransaction',
+    xrDecodeRawTransaction: 'xrDecodeRawTransaction',
     xrSendTransaction: 'xrSendTransaction',
   };
 
@@ -526,6 +527,20 @@ export class XRouter {
       // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
       throw new Error(`bad sendTransaction response of: ${res}`);
     return res;
+  }
+
+  async decodeTransaction(wallet: string, signedTx: string, query = this.queryNum): Promise<Transaction> {
+    const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrDecodeRawTransaction);
+    const res = await this.callService(
+      XRouter.namespaces.xr,
+      serviceName,
+      [signedTx],
+      query
+    );
+    if(!isPlainObject(res))
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+      throw new Error(`bad decodeTransaction response of: ${res}`);
+    return new Transaction(res);
   }
 
   async callService(namespace: string, serviceName: string, params: any[], query: number): Promise<any> {
