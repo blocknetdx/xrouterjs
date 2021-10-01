@@ -469,12 +469,6 @@ export class XRouter {
           .then(res => {
             snode.lastRequestTime = Date.now();
             const { text = '' } = res;
-            // let parsedJson: any;
-            // try {
-            //   parsedJson = JSON.parse(text);
-            // } catch(err) {
-            //   parsedJson = text;
-            // }
             // ToDo check response signatures
             const xrPubKey = res.headers['xr-pubkey'];
             const xrSignature = res.headers['xr-signature'];
