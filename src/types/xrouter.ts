@@ -5,6 +5,7 @@ import { ServiceNode, ServiceNodeData } from './service-node';
 import { Service } from './service';
 import request from 'superagent';
 import isNull from 'lodash/isNull';
+import isObject from 'lodash/isObject';
 import shuffle from 'lodash/shuffle';
 import { sha256, splitIntoSections } from '../util';
 import { blockMainnet } from '../networks/block';
@@ -24,7 +25,7 @@ interface XrouterOptions {
   timeout?: number;
 }
 
-const mostCommonReply = (replies: (SnodeReply|null)[]): string => {
+const mostCommonReply = (replies: SnodeReply[]): string => {
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   const filtered: SnodeReply[] = replies
@@ -432,14 +433,14 @@ export class XRouter {
     this._logInfo(`call service ${serviceName}`);
     const snodes = this.getSnodesByXrService(serviceName);
     this._logInfo(`${snodes.length} snodes serving ${serviceName}`);
-    const filteredSnodes = shuffle(snodes)
+    const filteredSnodes: ServiceNode[] = shuffle(snodes)
       .filter(snode => {
         return snode.isReady();
       });
     this._logInfo(`${filteredSnodes.length} snodes ready for ${serviceName}`);
-    const responseArr = await Promise.all(filteredSnodes
-      .slice(0, query)
-      .map((snode: ServiceNode) => new Promise<SnodeReply|null>(resolve => {
+    const responseArr = [];
+    for(const snode of filteredSnodes) {
+      const reply = await new Promise<SnodeReply|null>(resolve => {
         let path = '';
         if(namespace === XRouter.namespaces.xr) {
           const [ wallet, xrFunc ] = serviceName.split(XRouter.namespaces.xrdelim);
@@ -496,7 +497,15 @@ export class XRouter {
             }
             resolve(null);
           });
-      })));
+      });
+      if(isObject(reply)) {
+        responseArr.push(reply);
+        if(responseArr.length === query)
+          break;
+      }
+    }
+    if(responseArr.length < query)
+      throw new Error(`Responses returned from only ${responseArr.length} out of the required ${query} nodes.`);
     return mostCommonReply(responseArr);
   }
 
