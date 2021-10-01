@@ -1,6 +1,5 @@
 import dns from 'dns';
-import isNull from "lodash/isNull";
-import isUndefined from 'lodash/isUndefined';
+import crypto from 'crypto';
 
 export const dnsLookup = (hostname: string): Promise<string[]> => new Promise((resolve, reject) => {
   dns.lookup(
@@ -35,37 +34,7 @@ export const splitIntoSections = (splitConfig: string[][]): [string, {[key: stri
   return sections;
 };
 
-export const mostCommonReply = (items: any[]): any => {
-  const serializedItems = items
-    .map(item => {
-      try {
-        return JSON.stringify(item);
-      } catch(err) {
-        return null;
-      }
-    })
-    .reduce((obj: {[key: string]: number}, serialized: string|null) => {
-      if(isNull(serialized) || serialized === 'null') {
-        return obj;
-      } else if(obj[serialized]) {
-        obj[serialized]++;
-      } else {
-        obj[serialized] = 1;
-      }
-      return obj;
-    }, {});
-  const sortedSerialized = Object.keys(serializedItems)
-    .sort((a, b) => {
-      const numA = serializedItems[a];
-      const numB = serializedItems[b];
-      return numA === numB ? 0 : numA > numB ? -1 : 1;
-    });
-  if(sortedSerialized[0]) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-      return JSON.parse(sortedSerialized[0]);
-    } catch(err) {
-      // do nothing
-    }
-  }
-};
+export const sha256 = (str: string): string => crypto
+  .createHash('sha256')
+  .update(str)
+  .digest('hex');

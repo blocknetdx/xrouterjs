@@ -2,121 +2,18 @@ import { NetworkParams } from '../networks/NetworkParams';
 import { Peer } from 'p2p-node';
 import { Pool } from '../bitcore-p2p/lib';
 import { ServiceNode, ServiceNodeData } from './service-node';
-import { Service } from "./service";
+import { Service } from './service';
 import request from 'superagent';
-import isArray from 'lodash/isArray';
 import isNull from 'lodash/isNull';
-import isString from 'lodash/isString';
 import shuffle from 'lodash/shuffle';
-import isPlainObject from 'lodash/isPlainObject';
-import { mostCommonReply, splitIntoSections } from '../util';
+import { sha256, splitIntoSections } from '../util';
 import { blockMainnet } from '../networks/block';
 import uniq from 'lodash/uniq';
 
-class BlockData {
+interface SnodeReply {
+  pubKey: string;
   hash: string;
-  confirmations: number;
-  size: number;
-  height: number;
-  version: number;
-  versionHex: string;
-  merkleroot: string;
-  tx: string[];
-  time: number;
-  mediantime: number;
-  nonce: number;
-  bits: string;
-  difficulty: number;
-  chainwork: string;
-  previousblockhash: string;
-  nextblockhash: string;
-  constructor(data: any) {
-    this.hash = data.hash || '';
-    this.confirmations = data.confirmations || 0;
-    this.size = data.size || 0;
-    this.height = data.height || 0;
-    this.version = data.version || 0;
-    this.versionHex = data.versionHex || '';
-    this.merkleroot = data.merkleroot || '';
-    this.tx = data.tx || [];
-    this.time = data.time || 0;
-    this.mediantime = data.mediantime || 0;
-    this.nonce = data.nonce || 0;
-    this.bits = data.bits || '';
-    this.difficulty = data.difficulty || 0;
-    this.chainwork = data.chainwork || '';
-    this.previousblockhash = data.previousblockhash || '';
-    this.nextblockhash = data.nextblockhash || '';
-  }
-}
-
-// class ScriptSig {
-//   asm: string;
-//   hex: string;
-//   constructor(data: any = {}) {
-//     this.asm = data.asm || '';
-//     this.hex = data.hex || '';
-//   }
-// }
-
-// class Vin {
-//   txid: string;
-//   vout: number;
-//   scriptSig: ScriptSig;
-//   coinbase: string;
-//   sequence: number;
-//   constructor(data: any = {}) {
-//     this.txid = data.txid || '';
-//     this.vout = data.vout || 0;
-//     this.scriptSig = new ScriptSig(data.scriptSig);
-//     this.coinbase = data.coinbase || '';
-//     this.sequence = data.sequence || 0;
-//   }
-// }
-
-// class ScriptPubKey {
-//   asm: string;
-//   hex: string;
-//   reqSigs: number;
-//   type: string;
-//   addresses: string[];
-//   constructor(data: any = {}) {
-//     this.asm = data.asm || '';
-//     this.hex = data.hex || '';
-//     this.reqSigs = data.reqSigs || 0;
-//     this.type = data.type || '';
-//     this.addresses = data.addresses || [];
-//   }
-// }
-
-// class Vout {
-//   value: number;
-//   valueSat: number;
-//   n: number;
-//   scriptPubKey: ScriptPubKey;
-//   constructor(data: any = {}) {
-//     this.value = data.value || 0;
-//     this.valueSat = data.valueSat || 0;
-//     this.n = data.n || 0;
-//     this.scriptPubKey = new ScriptPubKey(data.scriptPubKey);
-//   }
-// }
-
-class Transaction {
-  txid: string;
-  size: number;
-  version: number;
-  locktime: number;
-  vin: any[];
-  vout: any[];
-  constructor(data: any = {}) {
-    this.txid = data.txid || '';
-    this.size = data.size || 0;
-    this.version = data.version || 0;
-    this.locktime = data.locktime || 0;
-    this.vin = data.vin || [];
-    this.vout = data.vout || [];
-  }
+  reply: string;
 }
 
 interface XrouterOptions {
@@ -126,6 +23,29 @@ interface XrouterOptions {
   queryNum?: number;
   timeout?: number;
 }
+
+const mostCommonReply = (replies: (SnodeReply|null)[]): string => {
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  const filtered: SnodeReply[] = replies
+    .filter(r => !isNull(r));
+  const counts = new Map();
+  const values = new Map();
+  for(const { hash, reply } of filtered) {
+    const count: number = counts.get(hash) || 0;
+    counts.set(hash, count + 1);
+    values.set(hash, reply);
+  }
+  const sortedCounts = [...counts.entries()]
+    .sort((a, b) => {
+      const countA = a[1];
+      const countB = b[1];
+      return countA === countB ? 0 : countA > countB ? -1 : 1;
+    });
+  const topHash = sortedCounts[0][0];
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+  return values.get(topHash) || '';
+};
 
 export class XRouter {
 
@@ -137,9 +57,9 @@ export class XRouter {
   };
 
   static spvCalls = {
-    xrGetBlockCount: 'xrGetBlockCount', // done
-    xrGetBlockHash: 'xrGetBlockHash', // done
-    xrGetBlock: 'xrGetBlock', // done
+    xrGetBlockCount: 'xrGetBlockCount',
+    xrGetBlockHash: 'xrGetBlockHash',
+    xrGetBlock: 'xrGetBlock',
     xrGetBlocks: 'xrGetBlocks',
     xrGetTransaction: 'xrGetTransaction',
     xrGetTransactions: 'xrGetTransactions',
@@ -427,126 +347,87 @@ export class XRouter {
       }, new Map());
   }
 
-  async getBlockCount(wallet: string, query = this.queryNum): Promise<number> {
+  async getBlockCount(wallet: string, query = this.queryNum): Promise<string> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlockCount);
-    const res = await this.callService(
+    return await this.callService(
       XRouter.namespaces.xr,
       serviceName,
       [],
       query
     );
-    if(typeof res !== 'number')
-      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-      throw new Error(`bad getBlockCount response of: ${res}`);
-    return res;
   }
 
   async getBlockHash(wallet: string, blockNumber: number, query = this.queryNum): Promise<string> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlockHash);
-    const res = await this.callService(
+    return await this.callService(
       XRouter.namespaces.xr,
       serviceName,
       [blockNumber],
       query
     );
-    if(typeof res !== 'string')
-      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-      throw new Error(`bad getBlockHash response of: ${res}`);
-    return res;
   }
 
-  async getBlock(wallet: string, blockHash: string, query = this.queryNum): Promise<BlockData> {
+  async getBlock(wallet: string, blockHash: string, query = this.queryNum): Promise<string> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlock);
-    const res = await this.callService(
+    return await this.callService(
       XRouter.namespaces.xr,
       serviceName,
       [blockHash],
       query
     );
-    if(isNull(res) || typeof res !== 'object')
-      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-      throw new Error(`bad getBlock response of: ${res}`);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return new BlockData(res);
   }
 
-  async getBlocks(wallet: string, blockHashes: string[], query = this.queryNum): Promise<BlockData[]> {
+  async getBlocks(wallet: string, blockHashes: string[], query = this.queryNum): Promise<string> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlocks);
-    const res = await this.callService(
+    return await this.callService(
       XRouter.namespaces.xr,
       serviceName,
       [...blockHashes],
       query
     );
-    if(!isArray(res))
-      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-      throw new Error(`bad getBlocks response of: ${res}`);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return res.map(data => new BlockData(data));
   }
 
-  async getTransaction(wallet: string, txid: string, query = this.queryNum): Promise<Transaction> {
+  async getTransaction(wallet: string, txid: string, query = this.queryNum): Promise<string> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetTransaction);
-    const res = await this.callService(
+    return await this.callService(
       XRouter.namespaces.xr,
       serviceName,
       [txid],
       query
     );
-    if(isNull(res) || typeof res !== 'object')
-      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-      throw new Error(`bad getTransaction response of: ${res}`);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return new Transaction(res);
   }
 
-  async getTransactions(wallet: string, txids: string[], query = this.queryNum): Promise<Transaction[]> {
+  async getTransactions(wallet: string, txids: string[], query = this.queryNum): Promise<string> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetTransactions);
-    const res = await this.callService(
+    return await this.callService(
       XRouter.namespaces.xr,
       serviceName,
       [...txids],
       query
     );
-    if(!isArray(res))
-      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-      throw new Error(`bad getTransactions response of: ${res}`);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return res.map(data => new Transaction(data));
   }
 
   async sendTransaction(wallet: string, signedTx: string, query = 1): Promise<string> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrSendTransaction);
-    const res = await this.callService(
+    return await this.callService(
       XRouter.namespaces.xr,
       serviceName,
       [signedTx],
       query
     );
-    if(!isString(res))
-      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-      throw new Error(`bad sendTransaction response of: ${res}`);
-    return res;
   }
 
-  async decodeTransaction(wallet: string, signedTx: string, query = this.queryNum): Promise<Transaction> {
+  async decodeTransaction(wallet: string, signedTx: string, query = this.queryNum): Promise<string> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrDecodeRawTransaction);
-    const res = await this.callService(
+    return await this.callService(
       XRouter.namespaces.xr,
       serviceName,
       [signedTx],
       query
     );
-    if(!isPlainObject(res))
-      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-      throw new Error(`bad decodeTransaction response of: ${res}`);
-    return new Transaction(res);
   }
 
-  async callService(namespace: string, serviceName: string, params: any[], query: number): Promise<any> {
-
-    const servicesMap = this.listAllAvailableServices();
-    console.log(servicesMap);
+  async callService(namespace: string, serviceName: string, params: any[], query: number): Promise<string> {
 
     this._logInfo(`call service ${serviceName}`);
     const snodes = this.getSnodesByXrService(serviceName);
@@ -558,7 +439,7 @@ export class XRouter {
     this._logInfo(`${filteredSnodes.length} snodes ready for ${serviceName}`);
     const responseArr = await Promise.all(filteredSnodes
       .slice(0, query)
-      .map((snode: ServiceNode) => new Promise(resolve => {
+      .map((snode: ServiceNode) => new Promise<SnodeReply|null>(resolve => {
         let path = '';
         if(namespace === XRouter.namespaces.xr) {
           const [ wallet, xrFunc ] = serviceName.split(XRouter.namespaces.xrdelim);
@@ -587,13 +468,13 @@ export class XRouter {
           .timeout(this.timeout)
           .then(res => {
             snode.lastRequestTime = Date.now();
-            const { text } = res;
-            let parsedJson: any;
-            try {
-              parsedJson = JSON.parse(text);
-            } catch(err) {
-              parsedJson = text;
-            }
+            const { text = '' } = res;
+            // let parsedJson: any;
+            // try {
+            //   parsedJson = JSON.parse(text);
+            // } catch(err) {
+            //   parsedJson = text;
+            // }
             // ToDo check response signatures
             const xrPubKey = res.headers['xr-pubkey'];
             const xrSignature = res.headers['xr-signature'];
@@ -605,7 +486,11 @@ export class XRouter {
               // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
               this._logErr(err.message + '\n' + err.stack);
             }
-            resolve(parsedJson);
+            resolve({
+              pubKey: xrPubKey,
+              hash: sha256(text),
+              reply: text,
+            });
           })
           .catch(err => {
             snode.lastRequestTime = Date.now();
@@ -618,7 +503,6 @@ export class XRouter {
             resolve(null);
           });
       })));
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return mostCommonReply(responseArr);
   }
 

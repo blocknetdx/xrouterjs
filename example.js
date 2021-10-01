@@ -20,7 +20,7 @@ const timeout = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
     const queryNum = 2;
 
     // make an spv call
-    const blockCount = await new Promise(resolve => {
+    const blockCountStr = await new Promise(resolve => {
       const interval = setInterval(() => {
         client.getBlockCount(wallet, queryNum)
           .then(res => {
@@ -32,6 +32,7 @@ const timeout = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
           });
       }, 30000);
     });
+    const blockCount = JSON.parse(blockCountStr);
     console.log(`block count is ${blockCount}`);
 
     await timeout(30000);
@@ -41,10 +42,12 @@ const timeout = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
 
     await timeout(30000);
 
-    const blockData = await client.getBlock(wallet, blockHash, queryNum);
+    const blockDataStr = await client.getBlock(wallet, blockHash, queryNum);
+    const blockData = JSON.parse(blockDataStr);
     console.log('block data', blockData);
 
-    const blocksData = await client.getBlocks(wallet, [blockData.hash, blockData.previousblockhash], queryNum);
+    const blocksDataStr = await client.getBlocks(wallet, [blockData.hash, blockData.previousblockhash], queryNum);
+    const blocksData = JSON.parse(blocksDataStr);
     console.log('blocks data', blocksData);
 
     const txids = blocksData
@@ -52,15 +55,15 @@ const timeout = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
 
     await timeout(30000);
 
-    if(blockData.tx.length > 0) {
-      const [ txid ] = txids;
-      const transaction = await client.getTransaction(wallet, txid, queryNum);
-      console.log('transaction', transaction);
-    }
+    const [ txid ] = txids;
+    const transactionStr = await client.getTransaction(wallet, txid, queryNum);
+    const transaction = JSON.parse(transactionStr);
+    console.log('transaction', transaction);
 
     await timeout(30000);
 
-    const transactions = await client.getTransactions(wallet, txids, queryNum);
+    const transactionsStr = await client.getTransactions(wallet, txids, queryNum);
+    const transactions = JSON.parse(transactionsStr);
     console.log('transactions', transactions);
 
   } catch(err) {
