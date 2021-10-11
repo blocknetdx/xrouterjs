@@ -7,7 +7,7 @@ import request from 'superagent';
 import isNull from 'lodash/isNull';
 import isObject from 'lodash/isObject';
 import shuffle from 'lodash/shuffle';
-import { sha256, splitIntoSections } from '../util';
+import { sha256, splitIntoSections, verifySignature } from '../util';
 import { blockMainnet } from '../networks/block';
 import uniq from 'lodash/uniq';
 
@@ -473,8 +473,11 @@ export class XRouter {
             // ToDo check response signatures
             const xrPubKey = res.headers['xr-pubkey'];
             const xrSignature = res.headers['xr-signature'];
-            // console.log('xrPubKey', xrPubKey);
-            // console.log('xrSignature', xrSignature);
+            const verified = xrPubKey === snode.pubKey && verifySignature(text, xrSignature, xrPubKey);
+            if(!verified) {
+              snode.downgradeStatus();
+              throw new Error(`Response signature from ${path} could not be verified.`);
+            }
             try {
               this._logInfo(`${serviceName} response from ${snode.host} ${text}`);
             } catch(err) {

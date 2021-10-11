@@ -1,5 +1,10 @@
+import BitcoreLib from 'bitcore-lib';
+import Utils from '../bitcore-wallet-service/src/lib/common/utils';
 import dns from 'dns';
 import crypto from 'crypto';
+import varuint from 'varuint-bitcoin';
+
+const { Signature } = BitcoreLib.crypto;
 
 export const dnsLookup = (hostname: string): Promise<string[]> => new Promise((resolve, reject) => {
   dns.lookup(
@@ -38,3 +43,23 @@ export const sha256 = (str: string): string => crypto
   .createHash('sha256')
   .update(str)
   .digest('hex');
+
+const fromCompact = (sigBuffer: Buffer): any => {
+  // @ts-ignore
+  return Signature.fromCompact(sigBuffer);
+};
+
+export const verifySignature = (message: string, compactSignature: string, pubKey: string): boolean => {
+  try {
+    const pubKeyBuffer = Buffer.from(pubKey, 'hex');
+    const signatureBuffer: Buffer = fromCompact(Buffer.from(compactSignature, 'hex')).toBuffer();
+    const messageBuffer = Buffer.from(message);
+    const res = varuint.encode(messageBuffer.length);
+    const encodedMessage = Buffer.concat([res, messageBuffer], messageBuffer.length + res.length);
+    const verified: boolean = Utils.verifyMessage(encodedMessage, signatureBuffer, pubKeyBuffer);
+    return verified;
+  } catch(err) {
+    // ignore error
+    return false;
+  }
+};
