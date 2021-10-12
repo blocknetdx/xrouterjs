@@ -56,9 +56,9 @@ export class XRouter extends EventEmitter {
   };
 
   static namespaces = {
-    xr: 'xr',
-    xrs: 'xrs',
-    xrd: 'xrd',
+    xr: 'xr', // xrouter
+    xrs: 'xrs', // xrouter service
+    xrd: 'xrd', // xrouter domain
     xrdelim: '::',
   };
 
@@ -317,9 +317,9 @@ export class XRouter extends EventEmitter {
     return str1 + XRouter.namespaces.xrdelim + str2;
   }
 
-  getSnodesByXrService(serviceName: string): ServiceNode[] {
+  getSnodesByXrService(namespace: string, serviceName: string): ServiceNode[] {
     return this.snodes
-      .filter(sn => sn.hasService(serviceName, this.maxFee));
+      .filter(sn => sn.hasService(namespace, serviceName, this.maxFee));
   }
 
   listAllAvailableServices() {
@@ -353,7 +353,7 @@ export class XRouter extends EventEmitter {
 
   async getBlockCountRaw(wallet: string, query = this.queryNum): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlockCount);
-    return await this.callService(
+    return await this._callService(
       XRouter.namespaces.xr,
       serviceName,
       [],
@@ -368,7 +368,7 @@ export class XRouter extends EventEmitter {
 
   async getBlockHashRaw(wallet: string, blockNumber: number, query = this.queryNum): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlockHash);
-    return await this.callService(
+    return await this._callService(
       XRouter.namespaces.xr,
       serviceName,
       [blockNumber],
@@ -383,7 +383,7 @@ export class XRouter extends EventEmitter {
 
   async getBlockRaw(wallet: string, blockHash: string, query = this.queryNum): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlock);
-    return await this.callService(
+    return await this._callService(
       XRouter.namespaces.xr,
       serviceName,
       [blockHash],
@@ -398,7 +398,7 @@ export class XRouter extends EventEmitter {
 
   async getBlocksRaw(wallet: string, blockHashes: string[], query = this.queryNum): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlocks);
-    return await this.callService(
+    return await this._callService(
       XRouter.namespaces.xr,
       serviceName,
       [...blockHashes],
@@ -413,7 +413,7 @@ export class XRouter extends EventEmitter {
 
   async getTransactionRaw(wallet: string, txid: string, query = this.queryNum): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetTransaction);
-    return await this.callService(
+    return await this._callService(
       XRouter.namespaces.xr,
       serviceName,
       [txid],
@@ -428,7 +428,7 @@ export class XRouter extends EventEmitter {
 
   async getTransactionsRaw(wallet: string, txids: string[], query = this.queryNum): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetTransactions);
-    return await this.callService(
+    return await this._callService(
       XRouter.namespaces.xr,
       serviceName,
       [...txids],
@@ -443,7 +443,7 @@ export class XRouter extends EventEmitter {
 
   async sendTransactionRaw(wallet: string, signedTx: string, query = 1): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrSendTransaction);
-    return await this.callService(
+    return await this._callService(
       XRouter.namespaces.xr,
       serviceName,
       [signedTx],
@@ -458,7 +458,7 @@ export class XRouter extends EventEmitter {
 
   async decodeTransactionRaw(wallet: string, signedTx: string, query = this.queryNum): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrDecodeRawTransaction);
-    return await this.callService(
+    return await this._callService(
       XRouter.namespaces.xr,
       serviceName,
       [signedTx],
@@ -471,10 +471,24 @@ export class XRouter extends EventEmitter {
     return mostCommonReply(res);
   }
 
-  async callService(namespace: string, serviceName: string, params: any[], query: number): Promise<SnodeReply[]> {
+  async callServiceRaw(service: string, params: any[], query = this.queryNum): Promise<SnodeReply[]> {
+    return await this._callService(
+      XRouter.namespaces.xrs,
+      service,
+      params,
+      query
+    );
+  }
+
+  async callService(service: string, params: any[], query: number): Promise<string> {
+    const res = await this.callServiceRaw(service, params, query);
+    return mostCommonReply(res);
+  }
+
+  async _callService(namespace: string, serviceName: string, params: any[], query: number): Promise<SnodeReply[]> {
 
     this.logInfo(`call service ${serviceName}`);
-    const snodes = this.getSnodesByXrService(serviceName);
+    const snodes = this.getSnodesByXrService(namespace, serviceName);
     this.logInfo(`${snodes.length} snodes serving ${serviceName}`);
     const filteredSnodes: ServiceNode[] = shuffle(snodes)
       .filter(snode => {
@@ -513,11 +527,11 @@ export class XRouter extends EventEmitter {
           .then(res => {
             snode.lastRequestTime = Date.now();
             const { text = '' } = res;
-            // ToDo check response signatures
             const xrPubKey = res.headers['xr-pubkey'];
             const xrSignature = res.headers['xr-signature'];
             const verified = xrPubKey === snode.pubKey && verifySignature(text, xrSignature, xrPubKey);
-            if(!verified) {
+            // ToDo handle error responses from services which have no signature
+            if(namespace === XRouter.namespaces.xr && !verified) {
               snode.downgradeStatus();
               throw new Error(`Response signature from ${path} could not be verified.`);
             }
