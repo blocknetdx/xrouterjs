@@ -1,5 +1,10 @@
+import BitcoreLib from 'bitcore-lib';
+import Utils from '../bitcore-wallet-service/src/lib/common/utils';
 import dns from 'dns';
-import isNull from "lodash/isNull";
+import crypto from 'crypto';
+import varuint from 'varuint-bitcoin';
+
+const { Signature } = BitcoreLib.crypto;
 
 export const dnsLookup = (hostname: string): Promise<string[]> => new Promise((resolve, reject) => {
   dns.lookup(
@@ -34,37 +39,27 @@ export const splitIntoSections = (splitConfig: string[][]): [string, {[key: stri
   return sections;
 };
 
-export const mostCommonReply = (items: any[]): any => {
-  const serializedItems = items
-    .map(item => {
-      try {
-        return JSON.stringify(item);
-      } catch(err) {
-        return null;
-      }
-    })
-    .reduce((obj: {[key: string]: number}, serialized: string|null) => {
-      if(isNull(serialized)) {
-        return obj;
-      } else if(obj[serialized]) {
-        obj[serialized]++;
-      } else {
-        obj[serialized] = 1;
-      }
-      return obj;
-    }, {});
-  const sortedSerialized = Object.keys(serializedItems)
-    .sort((a, b) => {
-      const numA = serializedItems[a];
-      const numB = serializedItems[b];
-      return numA === numB ? 0 : numA > numB ? -1 : 1;
-    });
-  if(sortedSerialized[0]) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-      return JSON.parse(sortedSerialized[0]);
-    } catch(err) {
-      // do nothing
-    }
+export const sha256 = (str: string): string => crypto
+  .createHash('sha256')
+  .update(str)
+  .digest('hex');
+
+const fromCompact = (sigBuffer: Buffer): any => {
+  // @ts-ignore
+  return Signature.fromCompact(sigBuffer);
+};
+
+export const verifySignature = (message: string, compactSignature: string, pubKey: string): boolean => {
+  try {
+    const pubKeyBuffer = Buffer.from(pubKey, 'hex');
+    const signatureBuffer: Buffer = fromCompact(Buffer.from(compactSignature, 'hex')).toBuffer();
+    const messageBuffer = Buffer.from(message);
+    const res = varuint.encode(messageBuffer.length);
+    const encodedMessage = Buffer.concat([res, messageBuffer], messageBuffer.length + res.length);
+    const verified: boolean = Utils.verifyMessage(encodedMessage, signatureBuffer, pubKeyBuffer);
+    return verified;
+  } catch(err) {
+    // ignore error
+    return false;
   }
 };

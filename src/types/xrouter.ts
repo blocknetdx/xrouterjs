@@ -1,13 +1,17 @@
-import { NetworkParams } from '../networks/NetworkParams';
 import { Peer } from 'p2p-node';
 import { Pool } from '../bitcore-p2p/lib';
 import { ServiceNode, ServiceNodeData } from './service-node';
-import { Service } from "./service";
+import { Service } from './service';
 import request from 'superagent';
 import isNull from 'lodash/isNull';
+import isObject from 'lodash/isObject';
 import shuffle from 'lodash/shuffle';
-import {mostCommonReply, splitIntoSections} from "../util";
-import {blockMainnet} from "../networks/block";
+import { sha256, splitIntoSections, verifySignature } from '../util';
+import uniq from 'lodash/uniq';
+import { SnodeReply } from './service-node-reply';
+import { EventEmitter } from 'events';
+import { NetworkParams } from '../networks/network-params';
+import { Networks } from '../networks';
 
 interface XrouterOptions {
   network?: NetworkParams,
@@ -17,12 +21,44 @@ interface XrouterOptions {
   timeout?: number;
 }
 
-export class XRouter {
+const mostCommonReply = (replies: SnodeReply[]): string => {
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  const filtered: SnodeReply[] = replies
+    .filter(r => !isNull(r));
+  const counts = new Map();
+  const values = new Map();
+  for(const { hash, reply } of filtered) {
+    const count: number = counts.get(hash) || 0;
+    counts.set(hash, count + 1);
+    values.set(hash, reply);
+  }
+  const sortedCounts = [...counts.entries()]
+    .sort((a, b) => {
+      const countA = a[1];
+      const countB = b[1];
+      return countA === countB ? 0 : countA > countB ? -1 : 1;
+    });
+  const topHash = sortedCounts[0][0];
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+  return values.get(topHash) || '';
+};
+
+export class XRouter extends EventEmitter {
+
+  static networks = {
+    MAINNET: Networks.MAINNET,
+  };
+
+  static events = {
+    INFO: 'INFO',
+    ERROR: 'ERROR',
+  };
 
   static namespaces = {
-    xr: 'xr',
-    xrs: 'xrs',
-    xrd: 'xrd',
+    xr: 'xr', // xrouter
+    xrs: 'xrs', // xrouter service
+    xrd: 'xrd', // xrouter domain
     xrdelim: '::',
   };
 
@@ -33,7 +69,7 @@ export class XRouter {
     xrGetBlocks: 'xrGetBlocks',
     xrGetTransaction: 'xrGetTransaction',
     xrGetTransactions: 'xrGetTransactions',
-    xrDecodeTransaction: 'xrDecodeTransaction',
+    xrDecodeRawTransaction: 'xrDecodeRawTransaction',
     xrSendTransaction: 'xrSendTransaction',
   };
 
@@ -68,7 +104,7 @@ export class XRouter {
   }
 
   peerMgr: Pool;
-  params: NetworkParams;
+  network: NetworkParams;
   started = false;
   ready = false;
   snodes: ServiceNode[] = [];
@@ -78,16 +114,18 @@ export class XRouter {
   maxPeers: number;
   _timeout = 30000;
 
-  _logInfo(message: string): void {
-    console.log(message);
-  }
-  _logErr(message: string): void {
-    console.error(message);
+  private logInfo(message: string): void {
+    this.emit(XRouter.events.INFO, message);
   }
 
-  constructor(options: XrouterOptions, logInfo:(message: string)=>void, logErr:(message: string)=>void) {
+  private logErr(message: string): void {
+    this.emit(XRouter.events.ERROR, message);
+  }
+
+  constructor(options: XrouterOptions) {
+    super();
     const {
-      network = blockMainnet,
+      network = XRouter.networks.MAINNET,
       maxPeers = 8,
       maxFee = 0,
       queryNum = 5,
@@ -97,15 +135,16 @@ export class XRouter {
     this.maxFee = maxFee;
     this.queryNum = queryNum;
     this.timeout = timeout;
-    this.params = network;
+    this.network = network;
     const peerMgr: Pool = new Pool({
+      network: network.name,
       maxSize: maxPeers,
     });
     peerMgr.on('peerconnect', (peer: Peer) => {
-      this._logInfo(`Connected to ${peer.host}`);
+      this.logInfo(`Connected to ${peer.host}`);
     });
     peerMgr.on('peerdisconnect', (peer: Peer) => {
-      this._logInfo(`Disconnected from ${peer.host}`);
+      this.logInfo(`Disconnected from ${peer.host}`);
       this.started = peerMgr.numberConnected() > 0;
     });
     peerMgr.on('peersnp', (peer: Peer, message: any) => {
@@ -140,7 +179,7 @@ export class XRouter {
           tls = '0',
         } = mainSection[1];
         if(!host) return;
-        const port = Number(portStr)|| this.params.port;
+        const port = Number(portStr)|| this.network.port;
         const serviceNodeData: ServiceNodeData = {
           pubKey,
           host,
@@ -154,7 +193,7 @@ export class XRouter {
           paymentAddress,
           tls: tls === 'true' || tls === '1',
           services: [],
-          exrCompatible: port !== this.params.port,
+          exrCompatible: port !== this.network.port,
           lastPingTime: pingTime,
         };
         const idx = this.snodes.findIndex(n => n.pubKey === pubKey);
@@ -227,19 +266,14 @@ export class XRouter {
     });
 
     this.peerMgr = peerMgr;
-
-    if(logInfo)
-      this._logInfo = logInfo;
-    if(logErr)
-      this._logErr = logErr;
   }
 
   async start(): Promise<boolean> {
     if(!this.started) {
-      this._logInfo('Starting XRouter client');
+      this.logInfo('Starting XRouter client');
 
       setInterval(() => {
-        this._logInfo(this.peerMgr.inspect());
+        this.logInfo(this.peerMgr.inspect());
       }, 30000);
 
       this.peerMgr.connect();
@@ -254,12 +288,12 @@ export class XRouter {
         }, 2000);
         const timeout = setTimeout(() => {
           clearInterval(interval);
-          this._logErr('Unable to connect to any peers.');
+          this.logErr('Unable to connect to any peers.');
         }, this._timeout);
       });
     }
     if(this.started) {
-      this._logInfo('XRouter started');
+      this.logInfo('XRouter started');
       await new Promise<void>(resolve => {
         const nodeCountInterval = setInterval(() => {
           if(this.exrNodeCount() > 1) {
@@ -269,7 +303,7 @@ export class XRouter {
         }, 1000);
       });
       this.ready = true;
-      this._logInfo('XRouter is ready');
+      this.logInfo('XRouter is ready');
     }
 
     return this.ready;
@@ -283,51 +317,187 @@ export class XRouter {
     return str1 + XRouter.namespaces.xrdelim + str2;
   }
 
-  getSnodesByXrService(serviceName: string): ServiceNode[] {
+  getSnodesByXrService(namespace: string, serviceName: string): ServiceNode[] {
     return this.snodes
-      .filter(sn => sn.hasService(serviceName, this.maxFee));
+      .filter(sn => sn.hasService(namespace, serviceName, this.maxFee));
   }
 
-  async getBlockCount(wallet: string, query = this.queryNum): Promise<number> {
+  listAllAvailableServices() {
+    const { snodes } = this;
+    const exrSnodes = snodes
+      .filter(sn => sn.exrCompatible);
+    return exrSnodes
+      .reduce((map, sn) => {
+        const { services, wallets } = sn;
+        for(const s of services) {
+          const splitName = s.name.split('::');
+          const toAdd = [];
+          if(splitName.length > 1) {
+            toAdd.push([splitName[0], splitName[1]]);
+          } else {
+            for(const wallet of wallets) {
+              toAdd.push([wallet, splitName[0]]);
+            }
+          }
+          for(const [wallet, name] of toAdd) {
+            const prevServices = map.get(wallet) || [];
+            map.set(wallet, uniq([
+              ...prevServices,
+              name,
+            ]).sort());
+          }
+        }
+        return map;
+      }, new Map());
+  }
+
+  async getBlockCountRaw(wallet: string, query = this.queryNum): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlockCount);
-    const res = await this.callService(
+    return await this._callService(
       XRouter.namespaces.xr,
       serviceName,
       [],
       query
     );
-    if(typeof res !== 'number')
-      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-      throw new Error(`bad getBlockCount response of: ${res}`);
-    return res;
   }
 
-  async getBlockHash(wallet: string, blockNumber: number, query = this.queryNum): Promise<number|string|null> {
+  async getBlockCount(wallet: string, query = this.queryNum): Promise<string> {
+    const res = await this.getBlockCountRaw(wallet, query);
+    return mostCommonReply(res);
+  }
+
+  async getBlockHashRaw(wallet: string, blockNumber: number, query = this.queryNum): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlockHash);
-    const res = await this.callService(
+    return await this._callService(
       XRouter.namespaces.xr,
       serviceName,
       [blockNumber],
       query
     );
-    if(typeof res !== 'string')
-      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-      throw new Error(`bad getBlockHash response of: ${res}`);
-    return res;
   }
 
-  async callService(namespace: string, serviceName: string, params: any[], query: number): Promise<any> {
-    this._logInfo(`call service ${serviceName}`);
-    const snodes = this.getSnodesByXrService(serviceName);
-    this._logInfo(`${snodes.length} snodes serving ${serviceName}`);
-    const filteredSnodes = shuffle(snodes)
+  async getBlockHash(wallet: string, blockNumber: number, query = this.queryNum): Promise<string> {
+    const res = await this.getBlockHashRaw(wallet, blockNumber, query);
+    return mostCommonReply(res);
+  }
+
+  async getBlockRaw(wallet: string, blockHash: string, query = this.queryNum): Promise<SnodeReply[]> {
+    const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlock);
+    return await this._callService(
+      XRouter.namespaces.xr,
+      serviceName,
+      [blockHash],
+      query
+    );
+  }
+
+  async getBlock(wallet: string, blockHash: string, query = this.queryNum): Promise<string> {
+    const res = await this.getBlockRaw(wallet, blockHash, query);
+    return mostCommonReply(res);
+  }
+
+  async getBlocksRaw(wallet: string, blockHashes: string[], query = this.queryNum): Promise<SnodeReply[]> {
+    const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlocks);
+    return await this._callService(
+      XRouter.namespaces.xr,
+      serviceName,
+      [...blockHashes],
+      query
+    );
+  }
+
+  async getBlocks(wallet: string, blockHashes: string[], query = this.queryNum): Promise<string> {
+    const res = await this.getBlocksRaw(wallet, blockHashes, query);
+    return mostCommonReply(res);
+  }
+
+  async getTransactionRaw(wallet: string, txid: string, query = this.queryNum): Promise<SnodeReply[]> {
+    const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetTransaction);
+    return await this._callService(
+      XRouter.namespaces.xr,
+      serviceName,
+      [txid],
+      query
+    );
+  }
+
+  async getTransaction(wallet: string, txid: string, query = this.queryNum): Promise<string> {
+    const res = await this.getTransactionRaw(wallet, txid, query);
+    return mostCommonReply(res);
+  }
+
+  async getTransactionsRaw(wallet: string, txids: string[], query = this.queryNum): Promise<SnodeReply[]> {
+    const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetTransactions);
+    return await this._callService(
+      XRouter.namespaces.xr,
+      serviceName,
+      [...txids],
+      query
+    );
+  }
+
+  async getTransactions(wallet: string, txids: string[], query = this.queryNum): Promise<string> {
+    const res = await this.getTransactionsRaw(wallet, txids, query);
+    return mostCommonReply(res);
+  }
+
+  async sendTransactionRaw(wallet: string, signedTx: string, query = 1): Promise<SnodeReply[]> {
+    const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrSendTransaction);
+    return await this._callService(
+      XRouter.namespaces.xr,
+      serviceName,
+      [signedTx],
+      query
+    );
+  }
+
+  async sendTransaction(wallet: string, signedTx: string, query = 1): Promise<string> {
+    const res = await this.sendTransactionRaw(wallet, signedTx, query);
+    return mostCommonReply(res);
+  }
+
+  async decodeTransactionRaw(wallet: string, signedTx: string, query = this.queryNum): Promise<SnodeReply[]> {
+    const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrDecodeRawTransaction);
+    return await this._callService(
+      XRouter.namespaces.xr,
+      serviceName,
+      [signedTx],
+      query
+    );
+  }
+
+  async decodeTransaction(wallet: string, signedTx: string, query = this.queryNum): Promise<string> {
+    const res = await this.decodeTransactionRaw(wallet, signedTx, query);
+    return mostCommonReply(res);
+  }
+
+  async callServiceRaw(service: string, params: any[], query = this.queryNum): Promise<SnodeReply[]> {
+    return await this._callService(
+      XRouter.namespaces.xrs,
+      service,
+      params,
+      query
+    );
+  }
+
+  async callService(service: string, params: any[], query: number): Promise<string> {
+    const res = await this.callServiceRaw(service, params, query);
+    return mostCommonReply(res);
+  }
+
+  async _callService(namespace: string, serviceName: string, params: any[], query: number): Promise<SnodeReply[]> {
+
+    this.logInfo(`call service ${serviceName}`);
+    const snodes = this.getSnodesByXrService(namespace, serviceName);
+    this.logInfo(`${snodes.length} snodes serving ${serviceName}`);
+    const filteredSnodes: ServiceNode[] = shuffle(snodes)
       .filter(snode => {
         return snode.isReady();
       });
-    this._logInfo(`${filteredSnodes.length} snodes ready for ${serviceName}`);
-    const responseArr = await Promise.all(filteredSnodes
-      .slice(0, query)
-      .map((snode: ServiceNode) => new Promise(resolve => {
+    this.logInfo(`${filteredSnodes.length} snodes ready for ${serviceName}`);
+    const responseArr = [];
+    for(const snode of filteredSnodes) {
+      const reply = await new Promise<SnodeReply|null>(resolve => {
         let path = '';
         if(namespace === XRouter.namespaces.xr) {
           const [ wallet, xrFunc ] = serviceName.split(XRouter.namespaces.xrdelim);
@@ -336,7 +506,7 @@ export class XRouter {
           path = `${snode.endpoint()}/${namespace}/${serviceName}`;
         }
         const jsonPayload = JSON.stringify(params);
-        this._logInfo(`POST to ${path} with params ${jsonPayload}`);
+        this.logInfo(`POST to ${path} with params ${jsonPayload}`);
         request
           .post(path)
           .set('Content-Type', 'application/json')
@@ -356,23 +526,22 @@ export class XRouter {
           .timeout(this.timeout)
           .then(res => {
             snode.lastRequestTime = Date.now();
-            const { text } = res;
-            let parsedJson: any;
-            try {
-              parsedJson = JSON.parse(text);
-            } catch(err) {
-              parsedJson = text;
-            }
-            // ToDo check response signatures
+            const { text = '' } = res;
             const xrPubKey = res.headers['xr-pubkey'];
             const xrSignature = res.headers['xr-signature'];
+            const verified = xrPubKey === snode.pubKey && verifySignature(text, xrSignature, xrPubKey);
+            // ToDo handle error responses from services which have no signature
+            if(namespace === XRouter.namespaces.xr && !verified) {
+              snode.downgradeStatus();
+              throw new Error(`Response signature from ${path} could not be verified.`);
+            }
             try {
-              this._logInfo(`${serviceName} response from ${snode.host} ${text}`);
+              this.logInfo(`${serviceName} response from ${snode.host} ${text}`);
             } catch(err) {
               // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
-              this._logErr(err.message + '\n' + err.stack);
+              this.logErr(err.message + '\n' + err.stack);
             }
-            resolve(parsedJson);
+            resolve(new SnodeReply(snode.pubKey, sha256(text), text));
           })
           .catch(err => {
             snode.lastRequestTime = Date.now();
@@ -380,13 +549,20 @@ export class XRouter {
               snode.downgradeStatus();
             } else {
               // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
-              this._logErr(err.message + '\n' + err.stack);
+              this.logErr(err.message + '\n' + err.stack);
             }
             resolve(null);
           });
-      })));
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return mostCommonReply(responseArr);
+      });
+      if(isObject(reply)) {
+        responseArr.push(reply);
+        if(responseArr.length === query)
+          break;
+      }
+    }
+    if(responseArr.length < query)
+      throw new Error(`Responses returned from only ${responseArr.length} out of the required ${query} nodes.`);
+    return responseArr;
   }
 
 }

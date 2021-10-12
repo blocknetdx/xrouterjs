@@ -1,8 +1,8 @@
-import { NetworkParams } from './NetworkParams';
+import { NetworkParams } from './network-params';
 
 export const blockMainnet: NetworkParams = {
-  name: 'BLOCK Mainnet',
-  alias: 'block',
+  name: 'block-livenet',
+  alias: 'block-mainnet',
   pubkeyhash: 0x1a,
   privatekey: 0x9a,
   scripthash: 0x1c,

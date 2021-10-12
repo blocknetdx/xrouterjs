@@ -136,22 +136,25 @@ function removeNetwork(network) {
   }
 }
 
-addNetwork({ // Blocknet
+addNetwork({
   name: 'livenet',
   alias: 'mainnet',
-  pubkeyhash: 0x1a,
-  privatekey: 0x9a,
-  scripthash: 0x1c,
-  bech32prefix: 'block',
+  pubkeyhash: 0x00,
+  privatekey: 0x80,
+  scripthash: 0x05,
+  bech32prefix: 'bc',
   xpubkey: 0x0488b21e,
   xprivkey: 0x0488ade4,
-  networkMagic: 0xa1a0a2a3,
-  port: 41412,
+  networkMagic: 0xf9beb4d9,
+  port: 8333,
   dnsSeeds: [
-    'seed1.blocknet.co',
-    'seed2.blocknet.co',
-    'seed3.blocknet.co',
-  ],
+    'seed.bitcoin.sipa.be',
+    'dnsseed.bluematt.me',
+    'dnsseed.bitcoin.dashjr.org',
+    'seed.bitcoinstats.com',
+    'seed.bitnodes.io',
+    'bitseed.xf2.org'
+  ]
 });
 
 /**

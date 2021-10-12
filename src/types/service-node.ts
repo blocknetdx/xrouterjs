@@ -1,4 +1,5 @@
 import { Service } from './service';
+import { XRouter } from './xrouter';
 
 export interface ServiceNodeData {
   pubKey: string;
@@ -85,8 +86,13 @@ export class ServiceNode {
     this.serviceIndexes[service.name] = newLength - 1;
   }
 
-  hasService(name: string, maxFee = 0): boolean {
-    const idx = this.serviceIndexes[name];
+  hasService(namespace: string, name: string, maxFee = 0): boolean {
+    let idx;
+    if(namespace === XRouter.namespaces.xr) {
+      idx = this.serviceIndexes[name];
+    } else {
+      idx = this.serviceIndexes[namespace + XRouter.namespaces.xrdelim + name];
+    }
     return this.exrCompatible
       && idx >= 0
       && Number(this.services[idx].fee) <= maxFee;

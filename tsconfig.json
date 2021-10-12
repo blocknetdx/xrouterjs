@@ -14,9 +14,8 @@
   "exclude": [
     "./dist/**/*",
     "./src/**/*.spec.ts",
-    "./net-testing.js",
-    "./node-peer-test.js",
-    "./example.js"
+    "./*.js",
+    "./bitcore-lib"
   ]
 }
 
