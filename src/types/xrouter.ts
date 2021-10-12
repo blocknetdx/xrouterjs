@@ -471,7 +471,8 @@ export class XRouter extends EventEmitter {
     return mostCommonReply(res);
   }
 
-  async callServiceRaw(service: string, params: any[], query = this.queryNum): Promise<SnodeReply[]> {
+  // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
+  async callServiceRaw(service: string, params: any, query = this.queryNum): Promise<SnodeReply[]> {
     return await this._callService(
       XRouter.namespaces.xrs,
       service,
@@ -480,7 +481,8 @@ export class XRouter extends EventEmitter {
     );
   }
 
-  async callService(service: string, params: any[], query: number): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
+  async callService(service: string, params: any, query: number): Promise<string> {
     const res = await this.callServiceRaw(service, params, query);
     return mostCommonReply(res);
   }
@@ -530,8 +532,7 @@ export class XRouter extends EventEmitter {
             const xrPubKey = res.headers['xr-pubkey'];
             const xrSignature = res.headers['xr-signature'];
             const verified = xrPubKey === snode.pubKey && verifySignature(text, xrSignature, xrPubKey);
-            // ToDo handle error responses from services which have no signature
-            if(namespace === XRouter.namespaces.xr && !verified) {
+            if(!verified) {
               snode.downgradeStatus();
               throw new Error(`Response signature from ${path} could not be verified.`);
             }

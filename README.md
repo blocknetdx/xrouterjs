@@ -40,29 +40,35 @@ start(): Promise<boolean>;
 
 ## XRouter Instance SPV Methods
 ```js
-getBlockCount(wallet: string, query: number): Promise<string>;
+getBlockCount(wallet: string, query: number): Promise<string>
 // e.g. xrClient.getBlockCount('BLOCK', 3).then(console.log).catch(console.error);
 
-getBlockHash(wallet: string, blockNumber: number, query: number): Promise<string>;
+getBlockHash(wallet: string, blockNumber: number, query: number): Promise<string>
 // e.g. xrClient.getBlockCount('BLOCK', 2191103, 3).then(console.log).catch(console.error);
 
-getBlock(wallet: string, blockHash: string, query: number): Promise<string>;
+getBlock(wallet: string, blockHash: string, query: number): Promise<string>
 // e.g. xrClient.getBlock('BLOCK', '1ffb53bcc380c508cab30e3cadda4ff0f43d66c2849dbbccea4292953f81493b', 3).then(console.log).catch(console.error);
 
-getBlocks(wallet: string, blockHashes: string[], query: number): Promise<string>;
+getBlocks(wallet: string, blockHashes: string[], query: number): Promise<string>
 // e.g. xrClient.getBlocks('BLOCK', ['1ffb53bcc380c508cab30e3cadda4ff0f43d66c2849dbbccea4292953f81493b', '89f0e3cdbc2a9b98b104f7dec88089b41eca1808314db813fe16120e121ed75c'], 3).then(console.log).catch(console.error);
 
-getTransaction(wallet: string, txid: string, query: number): Promise<string>;
+getTransaction(wallet: string, txid: string, query: number): Promise<string>
 // e.g. xrClient.getTransaction('BLOCK', 'c8230c8010706599a7ad68fe7aabdef551a889bbce445b90c00fd856a81ebac2', 3).then(console.log).catch(console.error);
 
-getTransactions(wallet: string, txids: string[], query: number): Promise<string>;
+getTransactions(wallet: string, txids: string[], query: number): Promise<string>
 // e.g. xrClient.getTransactions('BLOCK', ['c8230c8010706599a7ad68fe7aabdef551a889bbce445b90c00fd856a81ebac2', '7d0b4082c179c93768b2d818280cc4c1385564c16fb72fc027af8e7d3f1be31f'], 3).then(console.log).catch(console.error);
 
-sendTransaction(wallet: string, signedTx: string, query: number): Promise<string>;
+sendTransaction(wallet: string, signedTx: string, query: number): Promise<string>
 // e.g. xrClient.sendTransaction('BLOCK', signedTx, 1).then(console.log).catch(console.error);
 
-decodeTransaction(wallet: string, signedTx: string, query: number): Promise<string>;
+decodeTransaction(wallet: string, signedTx: string, query: number): Promise<string>
 // e.g. xrClient.decodeTransaction('BLOCK', signedTx, 3).then(console.log).catch(console.error);
+```
+
+## XRouter Instance `xrs` Methods
+```js
+callService(service: string, params: any, query: number): Promise<string>
+// e.g. xrClient.callService('eth_passthrough', {jsonrpc: '2.0', method: 'eth_blocknumber', params: [], id: 1}, 3);
 ```
 
 ## License
