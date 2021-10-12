@@ -10,12 +10,7 @@ import shuffle from 'lodash/shuffle';
 import { sha256, splitIntoSections, verifySignature } from '../util';
 import { blockMainnet } from '../networks/block';
 import uniq from 'lodash/uniq';
-
-interface SnodeReply {
-  pubKey: string;
-  hash: string;
-  reply: string;
-}
+import { SnodeReply } from './service-node-reply';
 
 interface XrouterOptions {
   network?: NetworkParams,
@@ -348,7 +343,7 @@ export class XRouter {
       }, new Map());
   }
 
-  async getBlockCount(wallet: string, query = this.queryNum): Promise<string> {
+  async getBlockCountRaw(wallet: string, query = this.queryNum): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlockCount);
     return await this.callService(
       XRouter.namespaces.xr,
@@ -358,7 +353,12 @@ export class XRouter {
     );
   }
 
-  async getBlockHash(wallet: string, blockNumber: number, query = this.queryNum): Promise<string> {
+  async getBlockCount(wallet: string, query = this.queryNum): Promise<string> {
+    const res = await this.getBlockCountRaw(wallet, query);
+    return mostCommonReply(res);
+  }
+
+  async getBlockHashRaw(wallet: string, blockNumber: number, query = this.queryNum): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlockHash);
     return await this.callService(
       XRouter.namespaces.xr,
@@ -368,7 +368,12 @@ export class XRouter {
     );
   }
 
-  async getBlock(wallet: string, blockHash: string, query = this.queryNum): Promise<string> {
+  async getBlockHash(wallet: string, blockNumber: number, query = this.queryNum): Promise<string> {
+    const res = await this.getBlockHashRaw(wallet, blockNumber, query);
+    return mostCommonReply(res);
+  }
+
+  async getBlockRaw(wallet: string, blockHash: string, query = this.queryNum): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlock);
     return await this.callService(
       XRouter.namespaces.xr,
@@ -378,7 +383,12 @@ export class XRouter {
     );
   }
 
-  async getBlocks(wallet: string, blockHashes: string[], query = this.queryNum): Promise<string> {
+  async getBlock(wallet: string, blockHash: string, query = this.queryNum): Promise<string> {
+    const res = await this.getBlockRaw(wallet, blockHash, query);
+    return mostCommonReply(res);
+  }
+
+  async getBlocksRaw(wallet: string, blockHashes: string[], query = this.queryNum): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlocks);
     return await this.callService(
       XRouter.namespaces.xr,
@@ -388,7 +398,12 @@ export class XRouter {
     );
   }
 
-  async getTransaction(wallet: string, txid: string, query = this.queryNum): Promise<string> {
+  async getBlocks(wallet: string, blockHashes: string[], query = this.queryNum): Promise<string> {
+    const res = await this.getBlocksRaw(wallet, blockHashes, query);
+    return mostCommonReply(res);
+  }
+
+  async getTransactionRaw(wallet: string, txid: string, query = this.queryNum): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetTransaction);
     return await this.callService(
       XRouter.namespaces.xr,
@@ -398,7 +413,12 @@ export class XRouter {
     );
   }
 
-  async getTransactions(wallet: string, txids: string[], query = this.queryNum): Promise<string> {
+  async getTransaction(wallet: string, txid: string, query = this.queryNum): Promise<string> {
+    const res = await this.getTransactionRaw(wallet, txid, query);
+    return mostCommonReply(res);
+  }
+
+  async getTransactionsRaw(wallet: string, txids: string[], query = this.queryNum): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetTransactions);
     return await this.callService(
       XRouter.namespaces.xr,
@@ -408,7 +428,12 @@ export class XRouter {
     );
   }
 
-  async sendTransaction(wallet: string, signedTx: string, query = 1): Promise<string> {
+  async getTransactions(wallet: string, txids: string[], query = this.queryNum): Promise<string> {
+    const res = await this.getTransactionsRaw(wallet, txids, query);
+    return mostCommonReply(res);
+  }
+
+  async sendTransactionRaw(wallet: string, signedTx: string, query = 1): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrSendTransaction);
     return await this.callService(
       XRouter.namespaces.xr,
@@ -418,7 +443,12 @@ export class XRouter {
     );
   }
 
-  async decodeTransaction(wallet: string, signedTx: string, query = this.queryNum): Promise<string> {
+  async sendTransaction(wallet: string, signedTx: string, query = 1): Promise<string> {
+    const res = await this.sendTransactionRaw(wallet, signedTx, query);
+    return mostCommonReply(res);
+  }
+
+  async decodeTransactionRaw(wallet: string, signedTx: string, query = this.queryNum): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrDecodeRawTransaction);
     return await this.callService(
       XRouter.namespaces.xr,
@@ -428,7 +458,12 @@ export class XRouter {
     );
   }
 
-  async callService(namespace: string, serviceName: string, params: any[], query: number): Promise<string> {
+  async decodeTransaction(wallet: string, signedTx: string, query = this.queryNum): Promise<string> {
+    const res = await this.decodeTransactionRaw(wallet, signedTx, query);
+    return mostCommonReply(res);
+  }
+
+  async callService(namespace: string, serviceName: string, params: any[], query: number): Promise<SnodeReply[]> {
 
     this._logInfo(`call service ${serviceName}`);
     const snodes = this.getSnodesByXrService(serviceName);
@@ -484,11 +519,7 @@ export class XRouter {
               // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
               this._logErr(err.message + '\n' + err.stack);
             }
-            resolve({
-              pubKey: xrPubKey,
-              hash: sha256(text),
-              reply: text,
-            });
+            resolve(new SnodeReply(snode.pubKey, sha256(text), text));
           })
           .catch(err => {
             snode.lastRequestTime = Date.now();
@@ -509,7 +540,7 @@ export class XRouter {
     }
     if(responseArr.length < query)
       throw new Error(`Responses returned from only ${responseArr.length} out of the required ${query} nodes.`);
-    return mostCommonReply(responseArr);
+    return responseArr;
   }
 
 }

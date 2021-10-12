@@ -17,7 +17,7 @@ const timeout = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
       return;
 
     const wallet = 'BLOCK';
-    const queryNum = 2;
+    const queryNum = 3;
 
     // make an spv call
     const blockCountStr = await new Promise(resolve => {
