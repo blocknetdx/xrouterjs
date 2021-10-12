@@ -4,7 +4,6 @@ export interface NetworkParams {
   pubkeyhash: number;
   privatekey: number;
   scripthash: number;
-  scripthash2?: number;
   bech32prefix: string;
   xpubkey: number;
   xprivkey: number;

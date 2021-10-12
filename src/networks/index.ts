@@ -1,11 +1,9 @@
 import bitcore from 'bitcore-lib';
-import { NetworkType } from '../constants';
 import { blockMainnet } from './block';
+import { NetworkParams } from './network-params';
 
 bitcore.Networks.add(blockMainnet);
 
 export const Networks = {
-  block: {
-    [NetworkType.MAINNET]: bitcore.Networks.get('BLOCK Mainnet', ['name']),
-  },
+  MAINNET: bitcore.Networks.get(blockMainnet.name, ['name']) as NetworkParams,
 };

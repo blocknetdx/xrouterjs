@@ -1,3 +1,3 @@
-import { Networks } from './networks';
+import { XRouter as XRouterType } from './types/xrouter';
 
-console.log('Networks', Networks);
+export const XRouter = XRouterType;

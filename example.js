@@ -1,5 +1,4 @@
-const { XRouter } = require('./dist/types/xrouter');
-const { blockMainnet } = require('./dist/networks/block');
+const { XRouter } = require('./dist');
 
 const timeout = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -8,7 +7,7 @@ const timeout = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
 
     // create xrouter client
     const client = new XRouter({
-      network: blockMainnet,
+      network: XRouter.networks.MAINNET,
     });
 
     // Listen for events

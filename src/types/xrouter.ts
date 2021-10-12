@@ -1,4 +1,3 @@
-import { NetworkParams } from '../networks/NetworkParams';
 import { Peer } from 'p2p-node';
 import { Pool } from '../bitcore-p2p/lib';
 import { ServiceNode, ServiceNodeData } from './service-node';
@@ -8,10 +7,11 @@ import isNull from 'lodash/isNull';
 import isObject from 'lodash/isObject';
 import shuffle from 'lodash/shuffle';
 import { sha256, splitIntoSections, verifySignature } from '../util';
-import { blockMainnet } from '../networks/block';
 import uniq from 'lodash/uniq';
 import { SnodeReply } from './service-node-reply';
 import { EventEmitter } from 'events';
+import { NetworkParams } from '../networks/network-params';
+import { Networks } from '../networks';
 
 interface XrouterOptions {
   network?: NetworkParams,
@@ -45,6 +45,10 @@ const mostCommonReply = (replies: SnodeReply[]): string => {
 };
 
 export class XRouter extends EventEmitter {
+
+  static networks = {
+    MAINNET: Networks.MAINNET,
+  };
 
   static events = {
     INFO: 'INFO',
@@ -100,7 +104,7 @@ export class XRouter extends EventEmitter {
   }
 
   peerMgr: Pool;
-  params: NetworkParams;
+  network: NetworkParams;
   started = false;
   ready = false;
   snodes: ServiceNode[] = [];
@@ -121,7 +125,7 @@ export class XRouter extends EventEmitter {
   constructor(options: XrouterOptions) {
     super();
     const {
-      network = blockMainnet,
+      network = XRouter.networks.MAINNET,
       maxPeers = 8,
       maxFee = 0,
       queryNum = 5,
@@ -131,8 +135,9 @@ export class XRouter extends EventEmitter {
     this.maxFee = maxFee;
     this.queryNum = queryNum;
     this.timeout = timeout;
-    this.params = network;
+    this.network = network;
     const peerMgr: Pool = new Pool({
+      network: network.name,
       maxSize: maxPeers,
     });
     peerMgr.on('peerconnect', (peer: Peer) => {
@@ -174,7 +179,7 @@ export class XRouter extends EventEmitter {
           tls = '0',
         } = mainSection[1];
         if(!host) return;
-        const port = Number(portStr)|| this.params.port;
+        const port = Number(portStr)|| this.network.port;
         const serviceNodeData: ServiceNodeData = {
           pubKey,
           host,
@@ -188,7 +193,7 @@ export class XRouter extends EventEmitter {
           paymentAddress,
           tls: tls === 'true' || tls === '1',
           services: [],
-          exrCompatible: port !== this.params.port,
+          exrCompatible: port !== this.network.port,
           lastPingTime: pingTime,
         };
         const idx = this.snodes.findIndex(n => n.pubKey === pubKey);
