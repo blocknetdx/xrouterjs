@@ -11,6 +11,7 @@ import { sha256, splitIntoSections, verifySignature } from '../util';
 import { blockMainnet } from '../networks/block';
 import uniq from 'lodash/uniq';
 import { SnodeReply } from './service-node-reply';
+import { EventEmitter } from 'events';
 
 interface XrouterOptions {
   network?: NetworkParams,
@@ -43,7 +44,12 @@ const mostCommonReply = (replies: SnodeReply[]): string => {
   return values.get(topHash) || '';
 };
 
-export class XRouter {
+export class XRouter extends EventEmitter {
+
+  static events = {
+    INFO: 'INFO',
+    ERROR: 'ERROR',
+  };
 
   static namespaces = {
     xr: 'xr',
@@ -104,14 +110,16 @@ export class XRouter {
   maxPeers: number;
   _timeout = 30000;
 
-  _logInfo(message: string): void {
-    console.log(message);
-  }
-  _logErr(message: string): void {
-    console.error(message);
+  private logInfo(message: string): void {
+    this.emit(XRouter.events.INFO, message);
   }
 
-  constructor(options: XrouterOptions, logInfo:(message: string)=>void, logErr:(message: string)=>void) {
+  private logErr(message: string): void {
+    this.emit(XRouter.events.ERROR, message);
+  }
+
+  constructor(options: XrouterOptions) {
+    super();
     const {
       network = blockMainnet,
       maxPeers = 8,
@@ -128,10 +136,10 @@ export class XRouter {
       maxSize: maxPeers,
     });
     peerMgr.on('peerconnect', (peer: Peer) => {
-      this._logInfo(`Connected to ${peer.host}`);
+      this.logInfo(`Connected to ${peer.host}`);
     });
     peerMgr.on('peerdisconnect', (peer: Peer) => {
-      this._logInfo(`Disconnected from ${peer.host}`);
+      this.logInfo(`Disconnected from ${peer.host}`);
       this.started = peerMgr.numberConnected() > 0;
     });
     peerMgr.on('peersnp', (peer: Peer, message: any) => {
@@ -253,19 +261,14 @@ export class XRouter {
     });
 
     this.peerMgr = peerMgr;
-
-    if(logInfo)
-      this._logInfo = logInfo;
-    if(logErr)
-      this._logErr = logErr;
   }
 
   async start(): Promise<boolean> {
     if(!this.started) {
-      this._logInfo('Starting XRouter client');
+      this.logInfo('Starting XRouter client');
 
       setInterval(() => {
-        this._logInfo(this.peerMgr.inspect());
+        this.logInfo(this.peerMgr.inspect());
       }, 30000);
 
       this.peerMgr.connect();
@@ -280,12 +283,12 @@ export class XRouter {
         }, 2000);
         const timeout = setTimeout(() => {
           clearInterval(interval);
-          this._logErr('Unable to connect to any peers.');
+          this.logErr('Unable to connect to any peers.');
         }, this._timeout);
       });
     }
     if(this.started) {
-      this._logInfo('XRouter started');
+      this.logInfo('XRouter started');
       await new Promise<void>(resolve => {
         const nodeCountInterval = setInterval(() => {
           if(this.exrNodeCount() > 1) {
@@ -295,7 +298,7 @@ export class XRouter {
         }, 1000);
       });
       this.ready = true;
-      this._logInfo('XRouter is ready');
+      this.logInfo('XRouter is ready');
     }
 
     return this.ready;
@@ -465,14 +468,14 @@ export class XRouter {
 
   async callService(namespace: string, serviceName: string, params: any[], query: number): Promise<SnodeReply[]> {
 
-    this._logInfo(`call service ${serviceName}`);
+    this.logInfo(`call service ${serviceName}`);
     const snodes = this.getSnodesByXrService(serviceName);
-    this._logInfo(`${snodes.length} snodes serving ${serviceName}`);
+    this.logInfo(`${snodes.length} snodes serving ${serviceName}`);
     const filteredSnodes: ServiceNode[] = shuffle(snodes)
       .filter(snode => {
         return snode.isReady();
       });
-    this._logInfo(`${filteredSnodes.length} snodes ready for ${serviceName}`);
+    this.logInfo(`${filteredSnodes.length} snodes ready for ${serviceName}`);
     const responseArr = [];
     for(const snode of filteredSnodes) {
       const reply = await new Promise<SnodeReply|null>(resolve => {
@@ -484,7 +487,7 @@ export class XRouter {
           path = `${snode.endpoint()}/${namespace}/${serviceName}`;
         }
         const jsonPayload = JSON.stringify(params);
-        this._logInfo(`POST to ${path} with params ${jsonPayload}`);
+        this.logInfo(`POST to ${path} with params ${jsonPayload}`);
         request
           .post(path)
           .set('Content-Type', 'application/json')
@@ -514,10 +517,10 @@ export class XRouter {
               throw new Error(`Response signature from ${path} could not be verified.`);
             }
             try {
-              this._logInfo(`${serviceName} response from ${snode.host} ${text}`);
+              this.logInfo(`${serviceName} response from ${snode.host} ${text}`);
             } catch(err) {
               // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
-              this._logErr(err.message + '\n' + err.stack);
+              this.logErr(err.message + '\n' + err.stack);
             }
             resolve(new SnodeReply(snode.pubKey, sha256(text), text));
           })
@@ -527,7 +530,7 @@ export class XRouter {
               snode.downgradeStatus();
             } else {
               // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
-              this._logErr(err.message + '\n' + err.stack);
+              this.logErr(err.message + '\n' + err.stack);
             }
             resolve(null);
           });

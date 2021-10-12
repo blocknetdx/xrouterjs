@@ -19,11 +19,17 @@ interface XrouterOptions {
   timeout?: number;
 }
 
-const xrClient = new XRouter(
-  options: XrouterOptions,
-  logInfo: (message: string)=>void, // defaults to console.log
-  logError: (message: string)=>void // defaults to console.error
-);
+const xrClient = new XRouter(options: XrouterOptions);
+```
+
+## Listening for events
+```js
+xrClient.on(XRouter.events.INFO, message => {
+  // do something with the info message string e.g. console.log(message);
+});
+xrClient.on(XRouter.events.ERROR, message => {
+  // do something with the error message string e.g. console.error(message);
+});
 ```
 
 ## Starting the XRouter server

@@ -9,7 +9,15 @@ const timeout = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
     // create xrouter client
     const client = new XRouter({
       network: blockMainnet,
-    }, console.log, console.error);
+    });
+
+    // Listen for events
+    client.on(XRouter.events.INFO, message => {
+      console.log(message);
+    });
+    client.on(XRouter.events.ERROR, message => {
+      console.error(message);
+    });
 
     // start the server & wait for it to find two or more EXR nodes
     const started = await client.start();
