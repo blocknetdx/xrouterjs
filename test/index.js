@@ -59,6 +59,7 @@ describe('XRouter', function() {
       xr = new XRouter({
         queryNum,
       });
+      xr.on(XRouter.events.INFO, console.log);
     });
 
     describe('logInfo method', function() {

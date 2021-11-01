@@ -202,6 +202,7 @@ export class XRouter extends EventEmitter {
           ...(idx >= 0 ? this.snodes[idx] : {}),
           ...serviceNodeData,
         });
+        sn.on('INFO', this.logInfo.bind(this));
         const serviceInstances = serviceSections
           .map(([name, options]) => new Service({
             name,
