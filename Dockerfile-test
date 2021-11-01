@@ -1,0 +1,14 @@
+FROM node:14.18.1
+
+WORKDIR /code
+COPY bitcore-lib bitcore-lib
+COPY src src
+COPY test test
+COPY package.json package.json
+COPY package-lock.json package-lock.json
+COPY tsconfig.json tsconfig.json
+
+RUN npm install
+RUN npm run build
+
+CMD ["npm", "run", "test"]

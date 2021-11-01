@@ -15,7 +15,8 @@
     "./dist/**/*",
     "./src/**/*.spec.ts",
     "./*.js",
-    "./bitcore-lib"
+    "./bitcore-lib",
+    "./test/**/*"
   ]
 }
 

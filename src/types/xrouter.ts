@@ -113,6 +113,7 @@ export class XRouter extends EventEmitter {
   timeout: number;
   maxPeers: number;
   _timeout = 30000;
+  _inspectInterval: any;
 
   private logInfo(message: string): void {
     this.emit(XRouter.events.INFO, message);
@@ -122,7 +123,7 @@ export class XRouter extends EventEmitter {
     this.emit(XRouter.events.ERROR, message);
   }
 
-  constructor(options: XrouterOptions) {
+  constructor(options: XrouterOptions = {}) {
     super();
     const {
       network = XRouter.networks.MAINNET,
@@ -272,7 +273,7 @@ export class XRouter extends EventEmitter {
     if(!this.started) {
       this.logInfo('Starting XRouter client');
 
-      setInterval(() => {
+      this._inspectInterval = setInterval(() => {
         this.logInfo(this.peerMgr.inspect());
       }, 30000);
 
@@ -296,7 +297,7 @@ export class XRouter extends EventEmitter {
       this.logInfo('XRouter started');
       await new Promise<void>(resolve => {
         const nodeCountInterval = setInterval(() => {
-          if(this.exrNodeCount() > 1) {
+          if(this.exrNodeCount() >= this.queryNum) {
             clearInterval(nodeCountInterval);
             resolve();
           }
@@ -307,6 +308,16 @@ export class XRouter extends EventEmitter {
     }
 
     return this.ready;
+  }
+
+  stop(): void {
+    this.logInfo('Stopping XRouter');
+    this.started = false;
+    this.ready = false;
+    this.snodes = [];
+    // @ts-ignore
+    this.peerMgr.disconnect();
+    clearInterval(this._inspectInterval);
   }
 
   exrNodeCount(): number {
@@ -320,35 +331,6 @@ export class XRouter extends EventEmitter {
   getSnodesByXrService(namespace: string, serviceName: string): ServiceNode[] {
     return this.snodes
       .filter(sn => sn.hasService(namespace, serviceName, this.maxFee));
-  }
-
-  listAllAvailableServices() {
-    const { snodes } = this;
-    const exrSnodes = snodes
-      .filter(sn => sn.exrCompatible);
-    return exrSnodes
-      .reduce((map, sn) => {
-        const { services, wallets } = sn;
-        for(const s of services) {
-          const splitName = s.name.split('::');
-          const toAdd = [];
-          if(splitName.length > 1) {
-            toAdd.push([splitName[0], splitName[1]]);
-          } else {
-            for(const wallet of wallets) {
-              toAdd.push([wallet, splitName[0]]);
-            }
-          }
-          for(const [wallet, name] of toAdd) {
-            const prevServices = map.get(wallet) || [];
-            map.set(wallet, uniq([
-              ...prevServices,
-              name,
-            ]).sort());
-          }
-        }
-        return map;
-      }, new Map());
   }
 
   async getBlockCountRaw(wallet: string, query = this.queryNum): Promise<SnodeReply[]> {
@@ -540,6 +522,7 @@ export class XRouter extends EventEmitter {
               this.logInfo(`${serviceName} response from ${snode.host} ${text}`);
             } catch(err) {
               // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
+              // @ts-ignore
               this.logErr(err.message + '\n' + err.stack);
             }
             resolve(new SnodeReply(snode.pubKey, sha256(text), text));

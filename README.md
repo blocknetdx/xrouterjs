@@ -71,6 +71,10 @@ callService(service: string, params: any, query: number): Promise<string>
 // e.g. xrClient.callService('eth_passthrough', {jsonrpc: '2.0', method: 'eth_blocknumber', params: [], id: 1}, 3);
 ```
 
+## Running tests
+1. Build the library: `npm run build`
+2. Run the tests: `npm run test`
+
 ## License
 
 By downloading and using this software, you acknowledge that:
