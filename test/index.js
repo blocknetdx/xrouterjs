@@ -140,7 +140,7 @@ describe('XRouter', function() {
       this.timeout(60000);
 
       before(async function() {
-        await new Promise(resolve => setTimeout(resolve, 60000));
+        await new Promise(resolve => setTimeout(resolve, 45000));
       });
 
       beforeEach(async function() {
