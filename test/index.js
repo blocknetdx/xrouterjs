@@ -128,16 +128,23 @@ describe('XRouter', function() {
     describe('RPC methods', function() {
 
       const blockCount = 2219929;
-      const blockHash = '7ab6de76c90369b8d5e3ac09507df0ef58cc66b089dc77decdaef8d7121f0dee';
+      const blockHashes = [
+        '7ab6de76c90369b8d5e3ac09507df0ef58cc66b089dc77decdaef8d7121f0dee',
+        '10bfa7bc698652bb973978b677737f894ed9fe5b3bff142bc7d7da6ec7577361',
+      ];
+      const transactions = [
+        '638b8eee8975abd1eec0a19fc6114613dd5fcca8c36709f7813b65d9d4112b5f',
+        '34730994fec6843d542d128596d2c9ed4522d44b0edb3723e05811d8a2d7a6cb',
+      ];
 
       this.timeout(60000);
 
       before(async function() {
-        await new Promise(resolve => setTimeout(resolve, 30000));
+        await new Promise(resolve => setTimeout(resolve, 60000));
       });
 
       beforeEach(async function() {
-        await new Promise(resolve => setTimeout(resolve, 30000));
+        await new Promise(resolve => setTimeout(resolve, 45000));
       });
 
       describe('getBlockCountRaw', function() {
@@ -158,7 +165,7 @@ describe('XRouter', function() {
       });
 
       describe('getBlockHashRaw', function() {
-        it('should get the block hash and return all responses', async function() {
+        it('should get a block hash and return all responses', async function() {
           const res = await xr.getBlockHashRaw(wallet, blockCount);
           res.should.be.an.Array();
           res.length.should.equal(queryNum);
@@ -166,10 +173,92 @@ describe('XRouter', function() {
       });
 
       describe('getBlockHash', function() {
-        it('should get the block hash', async function() {
+        it('should get a block hash', async function() {
           const res = await xr.getBlockHash(wallet, blockCount);
           res.should.be.a.String();
           res.should.equal(blockHash);
+        });
+      });
+
+      describe('getBlockRaw', function() {
+        it('should get a block and return all responses', async function() {
+          const res = await xr.getBlockRaw(wallet, blockHashes[0]);
+          res.should.be.an.Array();
+          res.length.should.equal(queryNum);
+        });
+      });
+
+      describe('getBlock', function() {
+        it('should get a block', async function() {
+          const blockHash = blockHashes[0];
+          const nextBlockHash = blockHashes[1];
+          const res = await xr.getBlock(wallet, blockHash);
+          res.should.be.a.String();
+          const parsed = JSON.parse(res);
+          parsed.should.be.an.Object();
+          parsed.hash.should.equal(blockHash);
+          parsed.nextblockhash.should.equal(nextBlockHash);
+        });
+      });
+
+      describe('getBlocksRaw', function() {
+        it('should get blocks and return all responses', async function() {
+          const res = await xr.getBlocksRaw(wallet, blockHashes);
+          res.should.be.an.Array();
+          res.length.should.equal(queryNum);
+        });
+      });
+
+      describe('getBlocks', function() {
+        it('should get blocks', async function() {
+          const res = await xr.getBlocks(wallet, blockHashes);
+          res.should.be.a.String();
+          const parsed = JSON.parse(res);
+          parsed.should.be.an.Array();
+          parsed.length.should.equal(blockHashes.length);
+          parsed.forEach(block => block.should.be.an.Object());
+          parsed[0].hash.should.equal(blockHash);
+          parsed[1].hash.should.equal(nextBlockHash);
+        });
+      });
+
+      describe('getTransactionRaw', function() {
+        it('should get a transaction and return all responses', async function() {
+          const res = await xr.getTransactionRaw(wallet, transactions[0]);
+          res.should.be.an.Array();
+          res.length.should.equal(queryNum);
+        });
+      });
+
+      describe('getTransaction', function() {
+        it('should get a transaction', async function() {
+          const transaction = transactions[0];
+          const res = await xr.getTransaction(wallet, transaction);
+          res.should.be.a.String();
+          const parsed = JSON.parse(res);
+          parsed.should.be.an.Object();
+          parsed.txid.should.equal(transaction);
+        });
+      });
+
+      describe('getTransactionsRaw', function() {
+        it('should get transactions and return all responses', async function() {
+          const res = await xr.getTransactionsRaw(wallet, transactions);
+          res.should.be.an.Array();
+          res.length.should.equal(queryNum);
+        });
+      });
+
+      describe('getTransactions', function() {
+        it('should get transactions', async function() {
+          const res = await xr.getTransactions(wallet, transactions);
+          res.should.be.a.String();
+          const parsed = JSON.parse(res);
+          parsed.should.be.an.Array();
+          parsed.length.should.equal(transactions.length);
+          parsed.forEach(tx => tx.should.be.an.Object());
+          parsed[0].txid.should.equal(transactions[0]);
+          parsed[1].txid.should.equal(transactions[1]);
         });
       });
 
