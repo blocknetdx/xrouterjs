@@ -1,3 +1,4 @@
+import { EventEmitter } from 'events';
 import { Service } from './service';
 import { XRouter } from './xrouter';
 
@@ -20,7 +21,7 @@ export interface ServiceNodeData {
   statusWarningTimeoutLength?: number;
 }
 
-export class ServiceNode {
+export class ServiceNode extends EventEmitter {
 
   static status = {
     GOOD: 'GOOD',
@@ -47,7 +48,8 @@ export class ServiceNode {
   statusWarningTimeoutLength = 86400000; // 24 hrs in milliseconds
   statusWarningTimeout?: ReturnType<typeof setTimeout>;
 
-  constructor(config: ServiceNodeData, logInfo = console.log) {
+  constructor(config: ServiceNodeData) {
+    super();
     const keys = new Set(Object.keys(config));
     if(keys.has('pubKey')) this.pubKey = config.pubKey || this.pubKey;
     if(keys.has('host')) this.host = config.host || this.host;
@@ -65,11 +67,10 @@ export class ServiceNode {
     if(keys.has('lastPingTime')) this.lastPingTime = config.lastPingTime || this.lastPingTime;
     if(keys.has('lastRequestTime')) this.lastRequestTime = config.lastRequestTime || this.lastRequestTime;
     if(keys.has('statusWarningTimeoutLength')) this.statusWarningTimeoutLength = config.statusWarningTimeoutLength || this.statusWarningTimeoutLength;
-    if(logInfo) this._logInfo = logInfo;
   }
 
   _logInfo(message: string): void {
-    console.log(message);
+    this.emit('INFO', message);
   }
 
   endpoint(): string {
