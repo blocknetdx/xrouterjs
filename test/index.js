@@ -176,7 +176,7 @@ describe('XRouter', function() {
         it('should get a block hash', async function() {
           const res = await xr.getBlockHash(wallet, blockCount);
           res.should.be.a.String();
-          res.should.equal(blockHash);
+          res.should.equal(blockHashes[0]);
         });
       });
 
@@ -217,8 +217,8 @@ describe('XRouter', function() {
           parsed.should.be.an.Array();
           parsed.length.should.equal(blockHashes.length);
           parsed.forEach(block => block.should.be.an.Object());
-          parsed[0].hash.should.equal(blockHash);
-          parsed[1].hash.should.equal(nextBlockHash);
+          parsed[0].hash.should.equal(blockHashes[0]);
+          parsed[1].hash.should.equal(blockHashes[1]);
         });
       });
 
