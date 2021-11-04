@@ -198,11 +198,17 @@ export class XRouter extends EventEmitter {
           lastPingTime: pingTime,
         };
         const idx = this.snodes.findIndex(n => n.pubKey === pubKey);
-        const sn = new ServiceNode({
-          ...(idx >= 0 ? this.snodes[idx] : {}),
-          ...serviceNodeData,
-        });
-        sn.on('INFO', this.logInfo.bind(this));
+        let sn: ServiceNode;
+        if(idx > 0) {
+          sn = this.snodes[idx];
+          for(const key of Object.keys(serviceNodeData)) {
+            // @ts-ignore
+            sn[key] = serviceNodeData[key];
+          }
+        } else {
+          sn = new ServiceNode(serviceNodeData);
+          sn.on('INFO', this.logInfo.bind(this));
+        }
         const serviceInstances = serviceSections
           .map(([name, options]) => new Service({
             name,
@@ -276,7 +282,7 @@ export class XRouter extends EventEmitter {
 
       this._inspectInterval = setInterval(() => {
         this.logInfo(this.peerMgr.inspect());
-      }, 30000);
+      }, 60000);
 
       this.peerMgr.connect();
 
@@ -315,6 +321,7 @@ export class XRouter extends EventEmitter {
     this.logInfo('Stopping XRouter');
     this.started = false;
     this.ready = false;
+    this.snodes.forEach(s => s.close());
     this.snodes = [];
     // @ts-ignore
     this.peerMgr.disconnect();

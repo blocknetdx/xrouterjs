@@ -67,6 +67,12 @@ export class ServiceNode extends EventEmitter {
     if(keys.has('lastPingTime')) this.lastPingTime = config.lastPingTime || this.lastPingTime;
     if(keys.has('lastRequestTime')) this.lastRequestTime = config.lastRequestTime || this.lastRequestTime;
     if(keys.has('statusWarningTimeoutLength')) this.statusWarningTimeoutLength = config.statusWarningTimeoutLength || this.statusWarningTimeoutLength;
+    this.close = this.close.bind(this);
+  }
+
+  close(): void {
+    if(this.statusWarningTimeout)
+      clearTimeout(this.statusWarningTimeout);
   }
 
   _logInfo(message: string): void {
