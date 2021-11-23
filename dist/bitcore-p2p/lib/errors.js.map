@@ -1,0 +1,1 @@
+{"version":3,"file":"errors.js","sourceRoot":"","sources":["../../../src/bitcore-p2p/lib/errors.js"],"names":[],"mappings":"AAAA,YAAY,CAAC;AAEb,IAAI,IAAI,GAAG;IACT,IAAI,EAAE,KAAK;IACX,OAAO,EAAE,0CAA0C;CACpD,CAAC;AAEF,MAAM,CAAC,OAAO,GAAG,OAAO,CAAC,aAAa,CAAC,CAAC,MAAM,CAAC,MAAM,CAAC,IAAI,CAAC,CAAC"}

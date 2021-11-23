@@ -2,7 +2,7 @@
   "name": "xrouterjs",
   "version": "0.1.0",
   "description": "Javascript library for xRouter",
-  "main": "./lib/index.js",
+  "main": "./dist/index.js",
   "scripts": {
     "sig-example": "node sig-example.js",
     "build": "tsc",
