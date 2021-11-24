@@ -2,7 +2,7 @@
   "name": "xrouterjs",
   "version": "0.1.0",
   "description": "Javascript library for xRouter",
-  "main": "./lib/index.js",
+  "main": "./dist/index.js",
   "scripts": {
     "sig-example": "node sig-example.js",
     "build": "tsc",
@@ -40,14 +40,15 @@
     "@types/superagent": "^4.1.11",
     "@typescript-eslint/eslint-plugin": "^4.23.0",
     "@typescript-eslint/parser": "^4.23.0",
-    "bitcore-lib": "./bitcore-lib",
     "eslint": "^7.26.0",
     "mocha": "^8.4.0",
     "should": "^13.2.3",
     "ts-mocha": "^8.0.0",
-    "typescript": "^4.2.4"
+    "typescript": "^4.2.4",
+    "why-is-node-running": "^2.2.0"
   },
   "dependencies": {
+    "bitcore-lib": "https://github.com/rBurgett/bitcore-lib-modified.git",
     "bloom-filter": "^0.2.0",
     "btc-p2p": "^0.2.0",
     "buffers": "github:bitpay/node-buffers#v0.1.2-bitpay",
