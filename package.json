@@ -48,7 +48,7 @@
     "why-is-node-running": "^2.2.0"
   },
   "dependencies": {
-    "bitcore-lib": "./bitcore-lib",
+    "bitcore-lib": "https://github.com/rBurgett/bitcore-lib-modified.git",
     "bloom-filter": "^0.2.0",
     "btc-p2p": "^0.2.0",
     "buffers": "github:bitpay/node-buffers#v0.1.2-bitpay",
