@@ -281,7 +281,8 @@ export class XRouter extends EventEmitter {
       this.logInfo('Starting XRouter client');
 
       this._inspectInterval = setInterval(() => {
-        this.logInfo(this.peerMgr.inspect());
+        this.logInfo(JSON.stringify(this.status()));
+        // this.logInfo(this.peerMgr.inspect());
       }, 60000);
 
       this.peerMgr.connect();
@@ -326,6 +327,24 @@ export class XRouter extends EventEmitter {
     // @ts-ignore
     this.peerMgr.disconnect();
     clearInterval(this._inspectInterval);
+  }
+
+  isStarted(): boolean {
+    return this.started;
+  }
+
+  isReady(): boolean {
+    return this.ready;
+  }
+
+  status(): {connectedPeers: number, totalPeers: number, exrNodes: number, totalXRNodes: number} {
+    const { peerMgr } = this;
+    return {
+      connectedPeers: peerMgr.numberConnected(),
+      totalPeers: peerMgr._addrs.length,
+      exrNodes: this.exrNodeCount(),
+      totalXRNodes: this.snodes.length,
+    };
   }
 
   exrNodeCount(): number {
