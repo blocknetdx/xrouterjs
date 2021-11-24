@@ -40,7 +40,6 @@
     "@types/superagent": "^4.1.11",
     "@typescript-eslint/eslint-plugin": "^4.23.0",
     "@typescript-eslint/parser": "^4.23.0",
-    "bitcore-lib": "./bitcore-lib",
     "eslint": "^7.26.0",
     "mocha": "^8.4.0",
     "should": "^13.2.3",
@@ -49,6 +48,7 @@
     "why-is-node-running": "^2.2.0"
   },
   "dependencies": {
+    "bitcore-lib": "./bitcore-lib",
     "bloom-filter": "^0.2.0",
     "btc-p2p": "^0.2.0",
     "buffers": "github:bitpay/node-buffers#v0.1.2-bitpay",
