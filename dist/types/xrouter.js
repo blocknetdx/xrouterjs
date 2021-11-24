@@ -28,7 +28,7 @@ const mostCommonReply = (replies) => {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     const filtered = replies
-        .filter(r => !isNull_1.default(r));
+        .filter(r => !(0, isNull_1.default)(r));
     const counts = new Map();
     const values = new Map();
     for (const { hash, reply } of filtered) {
@@ -82,7 +82,7 @@ class XRouter extends events_1.EventEmitter {
                     .filter((s) => s)
                     .filter((s) => !/^#/.test(s))
                     .map((s) => s.split('=').map(ss => ss.trim()));
-                const sections = util_1.splitIntoSections(splitConfig);
+                const sections = (0, util_1.splitIntoSections)(splitConfig);
                 const mainIdx = sections.findIndex((arr) => arr[0] === 'Main');
                 if (mainIdx < 0)
                     return;
@@ -388,7 +388,7 @@ class XRouter extends events_1.EventEmitter {
             this.logInfo(`call service ${serviceName}`);
             const snodes = this.getSnodesByXrService(namespace, serviceName);
             this.logInfo(`${snodes.length} snodes serving ${serviceName}`);
-            const filteredSnodes = shuffle_1.default(snodes)
+            const filteredSnodes = (0, shuffle_1.default)(snodes)
                 .filter(snode => {
                 return snode.isReady();
             });
@@ -428,7 +428,7 @@ class XRouter extends events_1.EventEmitter {
                         const { text = '' } = res;
                         const xrPubKey = res.headers['xr-pubkey'];
                         const xrSignature = res.headers['xr-signature'];
-                        const verified = xrPubKey === snode.pubKey && util_1.verifySignature(text, xrSignature, xrPubKey);
+                        const verified = xrPubKey === snode.pubKey && (0, util_1.verifySignature)(text, xrSignature, xrPubKey);
                         if (!verified) {
                             snode.downgradeStatus();
                             throw new Error(`Response signature from ${path} could not be verified.`);
@@ -441,7 +441,7 @@ class XRouter extends events_1.EventEmitter {
                             // @ts-ignore
                             this.logErr(err.message + '\n' + err.stack);
                         }
-                        resolve(new service_node_reply_1.SnodeReply(snode.pubKey, util_1.sha256(text), text));
+                        resolve(new service_node_reply_1.SnodeReply(snode.pubKey, (0, util_1.sha256)(text), text));
                     })
                         .catch(err => {
                         snode.lastRequestTime = Date.now();
@@ -455,7 +455,7 @@ class XRouter extends events_1.EventEmitter {
                         resolve(null);
                     });
                 });
-                if (isObject_1.default(reply)) {
+                if ((0, isObject_1.default)(reply)) {
                     responseArr.push(reply);
                     if (responseArr.length === query)
                         break;

@@ -2,6 +2,28 @@
 
 var bitcore = require('bitcore-lib');
 var Inventory = require('../inventory');
+require('./commands/addr');
+require('./commands/alert');
+require('./commands/block');
+require('./commands/filteradd');
+require('./commands/filterclear');
+require('./commands/filterload');
+require('./commands/getaddr');
+require('./commands/getblocks');
+require('./commands/getdata');
+require('./commands/getheaders');
+require('./commands/headers');
+require('./commands/inv');
+require('./commands/mempool');
+require('./commands/merkleblock');
+require('./commands/notfound');
+require('./commands/ping');
+require('./commands/pong');
+require('./commands/reject');
+require('./commands/snp');
+require('./commands/tx');
+require('./commands/verack');
+require('./commands/version');
 
 function builder(options) {
   /* jshint maxstatements: 20 */
