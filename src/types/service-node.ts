@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { Service } from './service';
 import { XRouter } from './xrouter';
+import { uniq } from 'lodash';
 
 export interface ServiceNodeData {
   pubKey: string;
@@ -19,6 +20,7 @@ export interface ServiceNodeData {
   lastPingTime: number,
   lastRequestTime?: number;
   statusWarningTimeoutLength?: number;
+  rawConfig?: string;
 }
 
 export class ServiceNode extends EventEmitter {
@@ -47,6 +49,7 @@ export class ServiceNode extends EventEmitter {
   status = ServiceNode.status.GOOD;
   statusWarningTimeoutLength = 86400000; // 24 hrs in milliseconds
   statusWarningTimeout?: ReturnType<typeof setTimeout>;
+  rawConfig = '';
 
   constructor(config: ServiceNodeData) {
     super();
@@ -67,6 +70,7 @@ export class ServiceNode extends EventEmitter {
     if(keys.has('lastPingTime')) this.lastPingTime = config.lastPingTime || this.lastPingTime;
     if(keys.has('lastRequestTime')) this.lastRequestTime = config.lastRequestTime || this.lastRequestTime;
     if(keys.has('statusWarningTimeoutLength')) this.statusWarningTimeoutLength = config.statusWarningTimeoutLength || this.statusWarningTimeoutLength;
+    if(keys.has('rawConfig')) this.rawConfig = config.rawConfig || this.rawConfig;
     this.close = this.close.bind(this);
   }
 
@@ -103,6 +107,29 @@ export class ServiceNode extends EventEmitter {
     return this.exrCompatible
       && idx >= 0
       && Number(this.services[idx].fee) <= maxFee;
+  }
+
+  getServicesByWallets(maxFee = 0): [string, string[]][] {
+    if(!this.exrCompatible)
+      return [];
+    const filteredServices = this.services
+      .filter(s => Number(s.fee) <= maxFee);
+    const servicesArr: [string, string[]][] = [];
+    for(const s of filteredServices) {
+      const splitName = s.name.split(XRouter.namespaces.xrdelim);
+      if(splitName.length < 2)
+        continue;
+      const [ wallet, service ] = splitName;
+      if(wallet === XRouter.namespaces.xrs || wallet.toUpperCase() !== wallet)
+        continue;
+      const idx = servicesArr.findIndex(([ w ]) => w === wallet);
+      if(idx >= 0)
+        servicesArr[idx][1] = uniq([...servicesArr[idx][1], service]);
+      else
+        servicesArr.push([wallet, [service]]);
+    }
+    servicesArr.forEach(([, services]) => services.sort());
+    return servicesArr;
   }
 
   getService(name: string): Service {

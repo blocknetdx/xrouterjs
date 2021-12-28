@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ServiceNode = void 0;
 const events_1 = require("events");
 const xrouter_1 = require("./xrouter");
+const lodash_1 = require("lodash");
 class ServiceNode extends events_1.EventEmitter {
     constructor(config) {
         super();
@@ -23,6 +24,7 @@ class ServiceNode extends events_1.EventEmitter {
         this.lastRequestTime = 0;
         this.status = ServiceNode.status.GOOD;
         this.statusWarningTimeoutLength = 86400000; // 24 hrs in milliseconds
+        this.rawConfig = '';
         this.serviceIndexes = {};
         const keys = new Set(Object.keys(config));
         if (keys.has('pubKey'))
@@ -57,6 +59,8 @@ class ServiceNode extends events_1.EventEmitter {
             this.lastRequestTime = config.lastRequestTime || this.lastRequestTime;
         if (keys.has('statusWarningTimeoutLength'))
             this.statusWarningTimeoutLength = config.statusWarningTimeoutLength || this.statusWarningTimeoutLength;
+        if (keys.has('rawConfig'))
+            this.rawConfig = config.rawConfig || this.rawConfig;
         this.close = this.close.bind(this);
     }
     close() {
@@ -87,6 +91,28 @@ class ServiceNode extends events_1.EventEmitter {
         return this.exrCompatible
             && idx >= 0
             && Number(this.services[idx].fee) <= maxFee;
+    }
+    getServicesByWallets(maxFee = 0) {
+        if (!this.exrCompatible)
+            return [];
+        const filteredServices = this.services
+            .filter(s => Number(s.fee) <= maxFee);
+        const servicesArr = [];
+        for (const s of filteredServices) {
+            const splitName = s.name.split(xrouter_1.XRouter.namespaces.xrdelim);
+            if (splitName.length < 2)
+                continue;
+            const [wallet, service] = splitName;
+            if (wallet === xrouter_1.XRouter.namespaces.xrs || wallet.toUpperCase() !== wallet)
+                continue;
+            const idx = servicesArr.findIndex(([w]) => w === wallet);
+            if (idx >= 0)
+                servicesArr[idx][1] = (0, lodash_1.uniq)([...servicesArr[idx][1], service]);
+            else
+                servicesArr.push([wallet, [service]]);
+        }
+        servicesArr.forEach(([, services]) => services.sort());
+        return servicesArr;
     }
     getService(name) {
         const idx = this.serviceIndexes[name];

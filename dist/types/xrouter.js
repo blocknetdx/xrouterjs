@@ -21,6 +21,7 @@ const isNull_1 = __importDefault(require("lodash/isNull"));
 const isObject_1 = __importDefault(require("lodash/isObject"));
 const shuffle_1 = __importDefault(require("lodash/shuffle"));
 const util_1 = require("../util");
+const uniq_1 = __importDefault(require("lodash/uniq"));
 const service_node_reply_1 = require("./service-node-reply");
 const events_1 = require("events");
 const networks_1 = require("../networks");
@@ -112,6 +113,7 @@ class XRouter extends events_1.EventEmitter {
                     services: [],
                     exrCompatible: port !== this.network.port,
                     lastPingTime: pingTime,
+                    rawConfig: message.config.xrouter.config,
                 };
                 const idx = this.snodes.findIndex(n => n.pubKey === pubKey);
                 let sn;
@@ -290,6 +292,19 @@ class XRouter extends events_1.EventEmitter {
         return this.snodes
             .filter(sn => sn.hasService(namespace, serviceName, this.maxFee));
     }
+    getAllAvailableSPVServices() {
+        const servicesArr = [];
+        for (const sn of this.snodes) {
+            for (const [wallet, services] of sn.getServicesByWallets()) {
+                const idx = servicesArr.findIndex(([w]) => w === wallet);
+                if (idx >= 0)
+                    servicesArr[idx][1] = (0, uniq_1.default)([...servicesArr[idx][1], ...services]);
+                else
+                    servicesArr.push([wallet, [...services]]);
+            }
+        }
+        return servicesArr;
+    }
     getBlockCountRaw(wallet, query = this.queryNum) {
         return __awaiter(this, void 0, void 0, function* () {
             const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlockCount);
@@ -385,6 +400,9 @@ class XRouter extends events_1.EventEmitter {
             const res = yield this.decodeTransactionRaw(wallet, signedTx, query);
             return mostCommonReply(res);
         });
+    }
+    decodeRawTransaction(wallet, signedTx, query = this.queryNum) {
+        return this.decodeTransaction(wallet, signedTx, query);
     }
     // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
     callServiceRaw(service, params, query = this.queryNum) {

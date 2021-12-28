@@ -196,6 +196,7 @@ export class XRouter extends EventEmitter {
           services: [],
           exrCompatible: port !== this.network.port,
           lastPingTime: pingTime,
+          rawConfig: message.config.xrouter.config,
         };
         const idx = this.snodes.findIndex(n => n.pubKey === pubKey);
         let sn: ServiceNode;
@@ -360,6 +361,20 @@ export class XRouter extends EventEmitter {
       .filter(sn => sn.hasService(namespace, serviceName, this.maxFee));
   }
 
+  getAllAvailableSPVServices(): [string, string[]][] {
+    const servicesArr: [string, string[]][] = [];
+    for(const sn of this.snodes) {
+      for(const [wallet, services] of sn.getServicesByWallets()) {
+        const idx = servicesArr.findIndex(([ w ]) => w === wallet);
+        if(idx >= 0)
+          servicesArr[idx][1] = uniq([...servicesArr[idx][1], ...services]);
+        else
+          servicesArr.push([wallet, [...services]]);
+      }
+    }
+    return servicesArr;
+  }
+
   async getBlockCountRaw(wallet: string, query = this.queryNum): Promise<SnodeReply[]> {
     const serviceName = this.combineWithDelim(wallet, XRouter.spvCalls.xrGetBlockCount);
     return await this._callService(
@@ -478,6 +493,10 @@ export class XRouter extends EventEmitter {
   async decodeTransaction(wallet: string, signedTx: string, query = this.queryNum): Promise<string> {
     const res = await this.decodeTransactionRaw(wallet, signedTx, query);
     return mostCommonReply(res);
+  }
+
+  decodeRawTransaction(wallet: string, signedTx: string, query = this.queryNum): Promise<string> {
+    return this.decodeTransaction(wallet, signedTx, query);
   }
 
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
