@@ -192,7 +192,7 @@ export class XRouter extends EventEmitter {
           clientRequestLimit: Number(clientRequestLimit),
           fetchLimit: Number(fetchLimit),
           paymentAddress,
-          tls: tls === 'true' || tls === '1',
+          tls: tls === 'true' || tls === '1' || port === 443,
           services: [],
           exrCompatible: port !== this.network.port,
           lastPingTime: pingTime,
