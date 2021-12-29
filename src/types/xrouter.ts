@@ -361,7 +361,7 @@ export class XRouter extends EventEmitter {
       .filter(sn => sn.hasService(namespace, serviceName, this.maxFee));
   }
 
-  getAllAvailableSPVServices(): [string, string[]][] {
+  getAllAvailableSPVServices(): [wallet: string, services: {name: string, parameters: [name: string, type: ('string'|'number')][]}[]][] {
     const servicesArr: [string, string[]][] = [];
     for(const sn of this.snodes) {
       for(const [wallet, services] of sn.getServicesByWallets()) {
@@ -372,7 +372,45 @@ export class XRouter extends EventEmitter {
           servicesArr.push([wallet, [...services]]);
       }
     }
-    return servicesArr;
+    return servicesArr
+      .map(([ wallet, services]) => {
+        return [
+          wallet,
+          services.map(s => ({name: s, parameters: this.getParamsForXrService(s)})),
+        ];
+      });
+  }
+
+  getParamsForXrService(service: string): [name: string, type: ('string'|'number')][] {
+    const params: [string, ('string'|'number')][] = [
+      ['wallet', 'string'],
+    ];
+    switch(service) {
+      case 'xrGetBlockCount':
+        break;
+      case 'xrGetBlockHash':
+        params.push(['blockNumber', 'number']);
+        break;
+      case 'xrGetBlock':
+        params.push(['blockHash', 'string']);
+        break;
+      case 'xrGetBlocks':
+        params.push(['blockHashes', 'string']);
+        break;
+      case 'xrGetTransaction':
+        params.push(['txid', 'string']);
+        break;
+      case 'xrGetTransactions':
+        params.push(['txids', 'string']);
+        break;
+      case 'xrSendTransaction':
+        params.push(['signedTx', 'string']);
+        break;
+      case 'xrDecodeRawTransaction':
+        params.push(['signedTx', 'string']);
+        break;
+    }
+    return params;
   }
 
   async getBlockCountRaw(wallet: string, query = this.queryNum): Promise<SnodeReply[]> {

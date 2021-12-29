@@ -303,7 +303,44 @@ class XRouter extends events_1.EventEmitter {
                     servicesArr.push([wallet, [...services]]);
             }
         }
-        return servicesArr;
+        return servicesArr
+            .map(([wallet, services]) => {
+            return [
+                wallet,
+                services.map(s => ({ name: s, parameters: this.getParamsForXrService(s) })),
+            ];
+        });
+    }
+    getParamsForXrService(service) {
+        const params = [
+            ['wallet', 'string'],
+        ];
+        switch (service) {
+            case 'xrGetBlockCount':
+                break;
+            case 'xrGetBlockHash':
+                params.push(['blockNumber', 'number']);
+                break;
+            case 'xrGetBlock':
+                params.push(['blockHash', 'string']);
+                break;
+            case 'xrGetBlocks':
+                params.push(['blockHashes', 'string']);
+                break;
+            case 'xrGetTransaction':
+                params.push(['txid', 'string']);
+                break;
+            case 'xrGetTransactions':
+                params.push(['txids', 'string']);
+                break;
+            case 'xrSendTransaction':
+                params.push(['signedTx', 'string']);
+                break;
+            case 'xrDecodeRawTransaction':
+                params.push(['signedTx', 'string']);
+                break;
+        }
+        return params;
     }
     getBlockCountRaw(wallet, query = this.queryNum) {
         return __awaiter(this, void 0, void 0, function* () {
