@@ -405,6 +405,22 @@ class XRouter extends events_1.EventEmitter {
         return this.decodeTransaction(wallet, signedTx, query);
     }
     // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
+    callXrServiceRaw(service, params, query = this.queryNum) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const serviceName = this.combineWithDelim(params[0], service);
+            return yield this._callService(XRouter.namespaces.xr, serviceName, params.slice(1), query);
+        });
+    }
+    // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
+    callXrService(service, params, query) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (params.length === 0)
+                throw new Error('Missing wallet param e.g. "BLOCK"');
+            const res = yield this.callXrServiceRaw(service, params, query);
+            return mostCommonReply(res);
+        });
+    }
+    // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
     callServiceRaw(service, params, query = this.queryNum) {
         return __awaiter(this, void 0, void 0, function* () {
             return yield this._callService(XRouter.namespaces.xrs, service, params, query);

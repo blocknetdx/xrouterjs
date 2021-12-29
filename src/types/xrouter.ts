@@ -500,6 +500,24 @@ export class XRouter extends EventEmitter {
   }
 
   // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
+  async callXrServiceRaw(service: string, params: any[], query = this.queryNum): Promise<SnodeReply[]> {
+    const serviceName = this.combineWithDelim(params[0], service);
+    return await this._callService(
+      XRouter.namespaces.xr,
+      serviceName,
+      params.slice(1),
+      query
+    );
+  }
+
+  // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
+  async callXrService(service: string, params: any[], query: number): Promise<string> {
+    if(params.length === 0) throw new Error('Missing wallet param e.g. "BLOCK"');
+    const res = await this.callXrServiceRaw(service, params, query);
+    return mostCommonReply(res);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
   async callServiceRaw(service: string, params: any, query = this.queryNum): Promise<SnodeReply[]> {
     return await this._callService(
       XRouter.namespaces.xrs,
